@@ -28,3 +28,29 @@ ui:
     height: 800
     min_width: 800
     min_height: 600
+
+# Настройки нормализации окон
+normalization:
+  # Пресеты по умолчанию
+  default_presets:
+    - name: "Половина экрана слева"
+      process_name: ""
+      x: 0
+      y: 0
+      width: 960  # Будет пересчитано на основе разрешения экрана
+      height: 1080
+      description: "Окно на левой половине экрана"
+    - name: "Половина экрана справа"
+      process_name: ""
+      x: 960
+      y: 0
+      width: 960
+      height: 1080
+      description: "Окно на правой половине экрана"
+    - name: "Четверть экрана (верхний левый)"
+      process_name: ""
+      x: 0
+      y: 0
+      width: 960
+      height: 540
+      description: "Окно в верхнем левом углу"

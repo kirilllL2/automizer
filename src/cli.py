@@ -8,6 +8,8 @@ import sys
 from typing import Optional
 
 from src.window_manager import WindowInfo, WindowManager
+from src.normalizer import ProcessNormalizer, NormalizationPreset
+from src.storage import PresetStorage
 
 
 def print_windows(windows: list[WindowInfo]) -> None:
@@ -32,24 +34,62 @@ def print_windows(windows: list[WindowInfo]) -> None:
     print(f"Всего окон: {len(windows)}\n")
 
 
+def print_presets(presets: list[NormalizationPreset]) -> None:
+    """Выводит список пресетов в виде таблицы."""
+    if not presets:
+        print("Нет сохраненных пресетов.")
+        return
+
+    print("\n" + "=" * 80)
+    print(f"{'ID':<15} {'Имя':<20} {'Процесс':<15} {'Позиция':<20} {'Размер'}")
+    print("=" * 80)
+
+    for preset in presets:
+        position = f"({preset.x}, {preset.y})"
+        size = f"{preset.width}x{preset.height}"
+        print(f"{preset.id:<15} {preset.name:<20} {preset.process_name:<15} {position:<20} {size}")
+
+    print("=" * 80)
+    print(f"Всего пресетов: {len(presets)}\n")
+
+
 def print_help() -> None:
     """Выводит справку по командам."""
     print("""
 Доступные команды:
+
+Управление окнами:
   list, l              - Показать список всех окон
   move <id> <x> <y>    - Переместить окно с указанным ID в координаты (x, y)
   resize <id> <w> <h>  - Изменить размер окна на (width x height)
   focus <id>           - Сфокусироваться на окне
   set <id> [x] [y] [w] [h] - Установить позицию и/или размер 
                            (используйте '-' для пропуска параметра)
+  normalize <id> <x> <y> <w> <h> - Нормализовать окно (позиция + размер)
+
+Управление пресетами:
+  presets, p           - Показать все сохраненные пресеты
+  preset_search <q>    - Поиск пресетов по запросу
+  preset_apply <id>    - Применить пресет к окну
+  preset_add <id> <name> <process> <x> <y> <w> <h> [description] - Добавить пресет
+  preset_remove <id>   - Удалить пресет
+  preset_edit <id> [--name=N] [--process=P] [--x=X] [--y=Y] [--w=W] [--h=H]
+                       - Редактировать пресет
+
+Поиск окон:
+  search <query>       - Поиск окон по заголовку
   refresh, r           - Обновить список окон
+
+Другие:
   help, h              - Показать эту справку
   quit, q              - Выйти из программы
 
 Примеры:
   move 12345 100 200   - Переместить окно 12345 в точку (100, 200)
-  resize 12345 800 600 - Изменить размер окна 12345 на 800x600
-  set 12345 50 - 400 300 - Установить x=50, y без изменений, w=400, h=300
+  normalize 12345 0 0 960 1080 - Нормализовать окно на левую половину экрана
+  preset_add browser_left "Browser Left" Chrome 0 0 960 1080 "Браузер слева"
+  preset_apply browser_left - Применить пресет browser_left
+  search chrome        - Найти все окна со словом "chrome" в заголовке
 """)
 
 
@@ -86,6 +126,8 @@ def main() -> None:
     print_help()
 
     wm = WindowManager()
+    normalizer = ProcessNormalizer(wm)
+    storage = PresetStorage()
     windows: list[WindowInfo] = []
 
     try:
@@ -146,6 +188,96 @@ def main() -> None:
                         print(f"Параметры окна {window_id} обновлены: {params}")
                     else:
                         print(f"Не удалось обновить параметры окна {window_id}")
+
+                elif cmd in ("normalize",):
+                    if len(args) != 5:
+                        print("Ошибка: используйте 'normalize <id> <x> <y> <width> <height>'")
+                        continue
+                    window_id = int(args[0])
+                    x, y, width, height = int(args[1]), int(args[2]), int(args[3]), int(args[4])
+                    if normalizer.normalize_window(window_id, x, y, width, height):
+                        print(f"Окно {window_id} нормализовано: ({x}, {y}) {width}x{height}")
+                    else:
+                        print(f"Не удалось нормализовать окно {window_id}")
+
+                elif cmd in ("search",):
+                    query = " ".join(args)
+                    results = normalizer.search_windows(query)
+                    print_windows(results)
+
+                elif cmd in ("presets", "p"):
+                    presets = storage.get_all_presets()
+                    print_presets(presets)
+
+                elif cmd in ("preset_search",):
+                    query = " ".join(args)
+                    presets = storage.search_presets(query)
+                    print_presets(presets)
+
+                elif cmd in ("preset_apply",):
+                    if len(args) != 1:
+                        print("Ошибка: используйте 'preset_apply <preset_id>'")
+                        continue
+                    preset_id = args[0]
+                    preset = storage.get_preset(preset_id)
+                    if preset is None:
+                        print(f"Пресет '{preset_id}' не найден")
+                        continue
+                    if normalizer.apply_preset(preset):
+                        print(f"Пресет '{preset.name}' применен к окну '{preset.process_name}'")
+                    else:
+                        print(f"Не удалось применить пресет. Окно '{preset.process_name}' не найдено")
+
+                elif cmd in ("preset_add",):
+                    if len(args) < 7:
+                        print("Ошибка: используйте 'preset_add <id> <name> <process> <x> <y> <width> <height> [description]'")
+                        continue
+                    preset_id = args[0]
+                    name = args[1]
+                    process_name = args[2]
+                    x, y, width, height = int(args[3]), int(args[4]), int(args[5]), int(args[6])
+                    description = args[7] if len(args) > 7 else ""
+                    try:
+                        storage.add_preset(preset_id, name, process_name, x, y, width, height, description)
+                        print(f"Пресет '{name}' добавлен с ID '{preset_id}'")
+                    except ValueError as e:
+                        print(f"Ошибка: {e}")
+
+                elif cmd in ("preset_remove",):
+                    if len(args) != 1:
+                        print("Ошибка: используйте 'preset_remove <preset_id>'")
+                        continue
+                    preset_id = args[0]
+                    if storage.remove_preset(preset_id):
+                        print(f"Пресет '{preset_id}' удален")
+                    else:
+                        print(f"Пресет '{preset_id}' не найден")
+
+                elif cmd in ("preset_edit",):
+                    if len(args) < 2:
+                        print("Ошибка: используйте 'preset_edit <id> [--name=N] [--process=P] [--x=X] [--y=Y] [--w=W] [--h=H]'")
+                        continue
+                    preset_id = args[0]
+                    kwargs = {}
+                    for arg in args[1:]:
+                        if arg.startswith("--name="):
+                            kwargs["name"] = arg[7:]
+                        elif arg.startswith("--process="):
+                            kwargs["process_name"] = arg[10:]
+                        elif arg.startswith("--x="):
+                            kwargs["x"] = int(arg[4:])
+                        elif arg.startswith("--y="):
+                            kwargs["y"] = int(arg[4:])
+                        elif arg.startswith("--w="):
+                            kwargs["width"] = int(arg[4:])
+                        elif arg.startswith("--h="):
+                            kwargs["height"] = int(arg[4:])
+                    
+                    result = storage.update_preset(preset_id, **kwargs)
+                    if result:
+                        print(f"Пресет '{preset_id}' обновлен")
+                    else:
+                        print(f"Пресет '{preset_id}' не найден")
 
                 elif cmd in ("refresh", "r"):
                     windows = wm.get_windows()
