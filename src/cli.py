@@ -10,6 +10,7 @@ from typing import Optional
 from src.window_manager import WindowInfo, WindowManager
 from src.normalizer import ProcessNormalizer, NormalizationPreset
 from src.storage import PresetStorage
+from src.screenshot import ScreenshotManager, ScreenshotInfo
 
 
 def print_windows(windows: list[WindowInfo]) -> None:
@@ -53,6 +54,27 @@ def print_presets(presets: list[NormalizationPreset]) -> None:
     print(f"Всего пресетов: {len(presets)}\n")
 
 
+def print_screenshots(screenshots: list) -> None:
+    """Выводит список скриншотов в виде таблицы."""
+    if not screenshots:
+        print("Нет сохраненных скриншотов.")
+        return
+
+    print("\n" + "=" * 100)
+    print(f"{'ID':<25} {'Путь':<35} {'Позиция':<15} {'Размер':<12} {'Дата создания'}")
+    print("=" * 100)
+
+    for ss in screenshots:
+        path_str = str(ss.path)[-32:]  # Последние 32 символа пути
+        position = f"({ss.x}, {ss.y})"
+        size = f"{ss.width}x{ss.height}"
+        date_str = ss.created_at.strftime("%Y-%m-%d %H:%M")
+        print(f"{ss.id:<25} {path_str:<35} {position:<15} {size:<12} {date_str}")
+
+    print("=" * 100)
+    print(f"Всего скриншотов: {len(screenshots)}\n")
+
+
 def print_help() -> None:
     """Выводит справку по командам."""
     print("""
@@ -76,6 +98,13 @@ def print_help() -> None:
   preset_edit <id> [--name=N] [--process=P] [--x=X] [--y=Y] [--w=W] [--h=H]
                        - Редактировать пресет
 
+Управление скриншотами:
+  screenshots, ss      - Показать все сохраненные скриншоты
+  screenshot <x> <y> <w> <h> [id] [desc] - Сделать скриншот области
+  screenshot_preview <x> <y> <w> <h> [id] [desc] - Скриншот с превью (красный квадрат)
+  screenshot_remove <id> - Удалить скриншот
+  screenshot_search <q> - Поиск скриншотов по запросу
+
 Поиск окон:
   search <query>       - Поиск окон по заголовку
   refresh, r           - Обновить список окон
@@ -90,6 +119,8 @@ def print_help() -> None:
   preset_add browser_left "Browser Left" Chrome 0 0 960 1080 "Браузер слева"
   preset_apply browser_left - Применить пресет browser_left
   search chrome        - Найти все окна со словом "chrome" в заголовке
+  screenshot 100 100 800 600 myshot "Мой скриншот" - Сделать скриншот
+  screenshot_preview 100 100 800 600 - Скриншот с предварительным показом
 """)
 
 
@@ -128,6 +159,7 @@ def main() -> None:
     wm = WindowManager()
     normalizer = ProcessNormalizer(wm)
     storage = PresetStorage()
+    screenshot_manager = ScreenshotManager()
     windows: list[WindowInfo] = []
 
     try:
@@ -282,6 +314,56 @@ def main() -> None:
                 elif cmd in ("refresh", "r"):
                     windows = wm.get_windows()
                     print(f"Список окон обновлен. Найдено {len(windows)} окон.")
+
+                # Управление скриншотами
+                elif cmd in ("screenshots", "ss"):
+                    screenshots = screenshot_manager.get_all_screenshots()
+                    print_screenshots(screenshots)
+
+                elif cmd in ("screenshot",):
+                    if len(args) < 4:
+                        print("Ошибка: используйте 'screenshot <x> <y> <width> <height> [id] [description]'")
+                        continue
+                    x, y, width, height = int(args[0]), int(args[1]), int(args[2]), int(args[3])
+                    screenshot_id = args[4] if len(args) > 4 else None
+                    description = args[5] if len(args) > 5 else ""
+                    try:
+                        ss = screenshot_manager.capture(x, y, width, height, screenshot_id, description)
+                        print(f"Скриншот сохранен с ID '{ss.id}': {ss.path}")
+                    except ValueError as e:
+                        print(f"Ошибка: {e}")
+                    except RuntimeError as e:
+                        print(f"Ошибка: {e}")
+
+                elif cmd in ("screenshot_preview",):
+                    if len(args) < 4:
+                        print("Ошибка: используйте 'screenshot_preview <x> <y> <width> <height> [id] [description]'")
+                        continue
+                    x, y, width, height = int(args[0]), int(args[1]), int(args[2]), int(args[3])
+                    screenshot_id = args[4] if len(args) > 4 else None
+                    description = args[5] if len(args) > 5 else ""
+                    try:
+                        ss = screenshot_manager.capture_with_preview(x, y, width, height, screenshot_id, description)
+                        print(f"Скриншот сохранен с ID '{ss.id}': {ss.path}")
+                    except ValueError as e:
+                        print(f"Ошибка: {e}")
+                    except RuntimeError as e:
+                        print(f"Ошибка: {e}")
+
+                elif cmd in ("screenshot_remove",):
+                    if len(args) != 1:
+                        print("Ошибка: используйте 'screenshot_remove <id>'")
+                        continue
+                    screenshot_id = args[0]
+                    if screenshot_manager.remove_screenshot(screenshot_id):
+                        print(f"Скриншот '{screenshot_id}' удален")
+                    else:
+                        print(f"Скриншот '{screenshot_id}' не найден")
+
+                elif cmd in ("screenshot_search",):
+                    query = " ".join(args)
+                    screenshots = screenshot_manager.search_screenshots(query)
+                    print_screenshots(screenshots)
 
                 elif cmd in ("help", "h"):
                     print_help()

@@ -6,9 +6,7 @@ __pycache__/
 # Virtual environments
 venv/
 .venv/
-.env
-.env.local
-*.env.*
+env/
 
 # Logs
 *.log
@@ -17,22 +15,36 @@ venv/
 *.tmp
 *.swp
 
+# IDE specific
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.local
+*.env.*
+
 # Coverage reports
 .coverage
 coverage/
 htmlcov/
-
-# IDE specific
-.vscode/
-.idea/
 
 # Build artifacts
 dist/
 build/
 target/
 
-# Dependencies cache
+# Package manager cache
 node_modules/
-.mypy_cache/
+.npm/
+.yarn/
+.pnpm/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Testing
 .pytest_cache/
+.mypy_cache/
 ```

@@ -54,3 +54,10 @@ normalization:
       width: 960
       height: 540
       description: "Окно в верхнем левом углу"
+
+# Настройки скриншотов
+screenshot:
+  # Длительность показа красного квадрата перед захватом (в секундах)
+  preview_duration: 1.0
+  # Путь для хранения скриншотов (по умолчанию ~/.automizer/data/screenshots)
+  storage_dir: "~/.automizer/data/screenshots"
