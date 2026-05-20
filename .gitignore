@@ -6,45 +6,36 @@ __pycache__/
 # Virtual environments
 venv/
 .venv/
-env/
+.env
+.env.local
+*.env.*
+
+# Build/dist directories
+dist/
+build/
+target/
+
+# Dependencies
+node_modules/
+.mypy_cache/
+.pytest_cache/
+.coverage
+coverage/
+htmlcov/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
 
 # Logs
 *.log
 
 # Temporary files
 *.tmp
-*.swp
-
-# IDE specific
-.vscode/
-.idea/
-
-# Environment files
-.env
-.env.local
-*.env.*
-
-# Coverage reports
-.coverage
-coverage/
-htmlcov/
-
-# Build artifacts
-dist/
-build/
-target/
-
-# Package manager cache
-node_modules/
-.npm/
-.yarn/
-.pnpm/
-
-# OS generated files
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-.mypy_cache/
 ```
