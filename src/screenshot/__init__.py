@@ -50,9 +50,8 @@ class ScreenshotManager:
                          Если не указан, используется путь из конфигурации.
         """
         if storage_path is None:
-            config = get_config()
-            data_dir = Path(config.get("paths", "data_dir", default="~/.automizer/data")).expanduser()
-            storage_path = data_dir / "screenshots"
+            # Используем относительный путь в репозитории
+            storage_path = Path(__file__).parent.parent.parent / "presets" / "screenshots"
 
         self.storage_path = storage_path
         self._screenshots: dict[str, ScreenshotInfo] = {}
