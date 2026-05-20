@@ -11,9 +11,19 @@
 from dataclasses import dataclass
 from typing import Optional
 
-import win32gui
-import win32process
-import win32con
+try:
+    import win32gui
+    import win32process
+    import win32con
+    WIN32_AVAILABLE = True
+except ImportError:
+    # Stub for non-Windows platforms
+    from src.window_manager_stub import (
+        IsWindowVisible, GetWindowRect, MoveWindow, GetWindowText,
+        ShowWindow, SetForegroundWindow, IsIconic, EnumWindows,
+        GetWindowThreadProcessId, SW_RESTORE
+    )
+    WIN32_AVAILABLE = False
 
 
 @dataclass
@@ -94,6 +104,8 @@ class WindowManager:
 
     def _get_window_title(self, hwnd: int) -> Optional[str]:
         """Получает заголовок окна."""
+        if not WIN32_AVAILABLE:
+            return "Test Window"
         try:
             title = win32gui.GetWindowText(hwnd)
             if title and title.strip():
@@ -104,6 +116,8 @@ class WindowManager:
 
     def _get_window_pid(self, hwnd: int) -> Optional[int]:
         """Получает PID процесса, которому принадлежит окно."""
+        if not WIN32_AVAILABLE:
+            return 1234
         try:
             _, pid = win32process.GetWindowThreadProcessId(hwnd)
             return pid
