@@ -180,7 +180,7 @@ class ScreenshotManager:
             root.attributes("-topmost", True)
             root.overrideredirect(True)
             root.configure(bg="black")
-            root.wm_attributes("-alpha", 0.0)  # Полностью прозрачный фон
+            root.wm_attributes("-alpha", 0.2)  # Полностью прозрачный фон
 
             # Создаем Canvas на весь экран
             canvas = tk.Canvas(root, bg="black", highlightthickness=0)
@@ -192,8 +192,7 @@ class ScreenshotManager:
                 x, y, x + width, y + height,
                 outline="red",
                 width=3,
-                fill="red",
-                stipple="gray50",  # Узор для полупрозрачности
+                fill="white"  # Узор для полупрозрачности
             )
 
             # Обновляем окно
