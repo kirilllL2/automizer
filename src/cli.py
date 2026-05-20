@@ -11,6 +11,7 @@ from src.window_manager import WindowInfo, WindowManager
 from src.normalizer import ProcessNormalizer, NormalizationPreset
 from src.storage import PresetStorage
 from src.screenshot import ScreenshotManager, ScreenshotInfo
+from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
 def print_windows(windows: list[WindowInfo]) -> None:
@@ -75,6 +76,25 @@ def print_screenshots(screenshots: list) -> None:
     print(f"Всего скриншотов: {len(screenshots)}\n")
 
 
+def print_screenshot_presets(presets: list[ScreenshotPreset]) -> None:
+    """Выводит список пресетов скриншотов в виде таблицы."""
+    if not presets:
+        print("Нет сохраненных пресетов скриншотов.")
+        return
+
+    print("\n" + "=" * 120)
+    print(f"{'ID':<20} {'Имя':<25} {'Путь':<30} {'Процесс':<15} {'Позиция':<15} {'Размер'}")
+    print("=" * 120)
+
+    for preset in presets:
+        position = f"({preset.x}, {preset.y})"
+        size = f"{preset.width}x{preset.height}"
+        print(f"{preset.id:<20} {preset.name:<25} {preset.screenshot_path:<30} {preset.process_preset_id:<15} {position:<15} {size}")
+
+    print("=" * 120)
+    print(f"Всего пресетов скриншотов: {len(presets)}\n")
+
+
 def print_help() -> None:
     """Выводит справку по командам."""
     print("""
@@ -89,14 +109,24 @@ def print_help() -> None:
                            (используйте '-' для пропуска параметра)
   normalize <id> <x> <y> <w> <h> - Нормализовать окно (позиция + размер)
 
-Управление пресетами:
-  presets, p           - Показать все сохраненные пресеты
-  preset_search <q>    - Поиск пресетов по запросу
-  preset_apply <id>    - Применить пресет к окну
-  preset_add <id> <name> <process> <x> <y> <w> <h> [description] - Добавить пресет
-  preset_remove <id>   - Удалить пресет
+Управление пресетами нормализации:
+  presets, p           - Показать все сохраненные пресеты нормализации
+  preset_search <q>    - Поиск пресетов нормализации по запросу
+  preset_apply <id>    - Применить пресет нормализации к окну
+  preset_add <id> <name> <process> <x> <y> <w> <h> [description] - Добавить пресет нормализации
+  preset_remove <id>   - Удалить пресет нормализации
   preset_edit <id> [--name=N] [--process=P] [--x=X] [--y=Y] [--w=W] [--h=H]
-                       - Редактировать пресет
+                       - Редактировать пресет нормализации
+
+Управление пресетами скриншотов:
+  screenshot_presets, sp          - Показать все пресеты скриншотов
+  screenshot_preset_search <q>    - Поиск пресетов скриншотов по запросу
+  screenshot_preset_add <id> <name> <path> <process_preset_id> <x> <y> <w> <h> [desc]
+                                  - Добавить пресет скриншота
+  screenshot_preset_remove <id>   - Удалить пресет скриншота
+  screenshot_preset_capture <id> [screenshot_id] - Сделать скриншот по пресету
+  quick_capture <process_preset_id> <screenshot_preset_id> [screenshot_id]
+                                  - Быстрый захват: нормализовать окно + сделать скриншот
 
 Управление скриншотами:
   screenshots, ss      - Показать все сохраненные скриншоты
@@ -118,6 +148,9 @@ def print_help() -> None:
   normalize 12345 0 0 960 1080 - Нормализовать окно на левую половину экрана
   preset_add browser_left "Browser Left" Chrome 0 0 960 1080 "Браузер слева"
   preset_apply browser_left - Применить пресет browser_left
+  screenshot_preset_add myshot "My Screenshot" "~/screenshots/myshot.png" browser_left 10 10 800 600
+  screenshot_preset_capture myshot - Сделать скриншот по пресету
+  quick_capture browser_left myshot - Нормализовать окно browser_left и сделать скриншот myshot
   search chrome        - Найти все окна со словом "chrome" в заголовке
   screenshot 100 100 800 600 myshot "Мой скриншот" - Сделать скриншот
   screenshot_preview 100 100 800 600 - Скриншот с предварительным показом
@@ -160,6 +193,7 @@ def main() -> None:
     normalizer = ProcessNormalizer(wm)
     storage = PresetStorage()
     screenshot_manager = ScreenshotManager()
+    screenshot_preset_storage = ScreenshotPresetStorage()
     windows: list[WindowInfo] = []
 
     try:
@@ -364,6 +398,96 @@ def main() -> None:
                     query = " ".join(args)
                     screenshots = screenshot_manager.search_screenshots(query)
                     print_screenshots(screenshots)
+
+                # Управление пресетами скриншотов
+                elif cmd in ("screenshot_presets", "sp"):
+                    presets = screenshot_preset_storage.get_all_presets()
+                    print_screenshot_presets(presets)
+
+                elif cmd in ("screenshot_preset_search",):
+                    query = " ".join(args)
+                    presets = screenshot_preset_storage.search_presets(query)
+                    print_screenshot_presets(presets)
+
+                elif cmd in ("screenshot_preset_add",):
+                    if len(args) < 8:
+                        print("Ошибка: используйте 'screenshot_preset_add <id> <name> <path> <process_preset_id> <x> <y> <width> <height> [description]'")
+                        continue
+                    preset_id = args[0]
+                    name = args[1]
+                    screenshot_path = args[2]
+                    process_preset_id = args[3]
+                    x, y, width, height = int(args[4]), int(args[5]), int(args[6]), int(args[7])
+                    description = args[8] if len(args) > 8 else ""
+                    try:
+                        screenshot_preset_storage.add_preset(
+                            preset_id, name, screenshot_path, process_preset_id, x, y, width, height, description
+                        )
+                        print(f"Пресет скриншота '{name}' добавлен с ID '{preset_id}'")
+                    except ValueError as e:
+                        print(f"Ошибка: {e}")
+
+                elif cmd in ("screenshot_preset_remove",):
+                    if len(args) != 1:
+                        print("Ошибка: используйте 'screenshot_preset_remove <id>'")
+                        continue
+                    preset_id = args[0]
+                    if screenshot_preset_storage.remove_preset(preset_id):
+                        print(f"Пресет скриншота '{preset_id}' удален")
+                    else:
+                        print(f"Пресет скриншота '{preset_id}' не найден")
+
+                elif cmd in ("screenshot_preset_capture",):
+                    if len(args) < 1:
+                        print("Ошибка: используйте 'screenshot_preset_capture <preset_id> [screenshot_id]'")
+                        continue
+                    preset_id = args[0]
+                    screenshot_id = args[1] if len(args) > 1 else None
+                    preset = screenshot_preset_storage.get_preset(preset_id)
+                    if preset is None:
+                        print(f"Пресет скриншота '{preset_id}' не найден")
+                        continue
+                    try:
+                        ss = screenshot_preset_storage.capture_with_preset(preset, screenshot_manager, screenshot_id)
+                        print(f"Скриншот сохранен с ID '{ss.id}': {ss.path}")
+                    except (ValueError, RuntimeError) as e:
+                        print(f"Ошибка: {e}")
+
+                elif cmd in ("quick_capture",):
+                    if len(args) < 2:
+                        print("Ошибка: используйте 'quick_capture <process_preset_id> <screenshot_preset_id> [screenshot_id]'")
+                        continue
+                    process_preset_id = args[0]
+                    screenshot_preset_id = args[1]
+                    screenshot_id = args[2] if len(args) > 2 else None
+                    
+                    # Получаем пресет нормализации
+                    process_preset = storage.get_preset(process_preset_id)
+                    if process_preset is None:
+                        print(f"Пресет нормализации '{process_preset_id}' не найден")
+                        continue
+                    
+                    # Получаем пресет скриншота
+                    screenshot_preset = screenshot_preset_storage.get_preset(screenshot_preset_id)
+                    if screenshot_preset is None:
+                        print(f"Пресет скриншота '{screenshot_preset_id}' не найден")
+                        continue
+                    
+                    # Проверяем что пресеты связаны
+                    if screenshot_preset.process_preset_id != process_preset_id:
+                        print(f"Предупреждение: пресет скриншота связан с процессом '{screenshot_preset.process_preset_id}', а не с '{process_preset_id}'")
+                    
+                    # Нормализуем окно
+                    if normalizer.apply_preset(process_preset):
+                        print(f"Окно нормализовано по пресету '{process_preset.name}'")
+                        # Делаем скриншот
+                        try:
+                            ss = screenshot_preset_storage.capture_with_preset(screenshot_preset, screenshot_manager, screenshot_id)
+                            print(f"Скриншот сохранен с ID '{ss.id}': {ss.path}")
+                        except (ValueError, RuntimeError) as e:
+                            print(f"Ошибка при создании скриншота: {e}")
+                    else:
+                        print(f"Не удалось нормализовать окно. Процесс '{process_preset.process_name}' не найден")
 
                 elif cmd in ("help", "h"):
                     print_help()

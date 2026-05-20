@@ -22,6 +22,7 @@ from src.window_manager import WindowManager, WindowInfo
 from src.normalizer import ProcessNormalizer, NormalizationPreset
 from src.storage import PresetStorage
 from src.screenshot import ScreenshotManager, ScreenshotInfo
+from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
 # Стили приложения
@@ -1231,6 +1232,704 @@ class EditPresetDialog(tk.Toplevel):
         self.destroy()
 
 
+class ScreenshotPresetManagerFrame(ttk.LabelFrame):
+    """Фрейм для управления пресетами скриншотов и быстрого захвата."""
+
+    def __init__(
+        self, 
+        parent, 
+        preset_storage: ScreenshotPresetStorage,
+        screenshot_manager: ScreenshotManager,
+        normalizer: ProcessNormalizer,
+        process_preset_storage: PresetStorage
+    ):
+        super().__init__(parent, text="🎯 Пресеты скриншотов")
+        self.preset_storage = preset_storage
+        self.screenshot_manager = screenshot_manager
+        self.normalizer = normalizer
+        self.process_preset_storage = process_preset_storage
+        self._setup_ui()
+        self._refresh_presets()
+
+    def _setup_ui(self) -> None:
+        # Верхняя часть - быстрый захват
+        quick_capture_frame = ttk.LabelFrame(self, text="⚡ Быстрый захват")
+        quick_capture_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        ttk.Label(
+            quick_capture_frame, 
+            text="Выберите пресет процесса и пресет скриншота для мгновенного захвата:",
+            font=("Segoe UI", 10, "bold")
+        ).pack(pady=(5, 10))
+
+        # Выбор пресета процесса
+        process_frame = ttk.Frame(quick_capture_frame)
+        process_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(process_frame, text="📋 Пресет процесса:").grid(row=0, column=0, padx=(0, 10), sticky=tk.E)
+        self.process_preset_var = tk.StringVar()
+        self.process_preset_combo = ttk.Combobox(process_frame, textvariable=self.process_preset_var, width=30, state="readonly")
+        self.process_preset_combo.grid(row=0, column=1, sticky=tk.W)
+        
+        # Заполняем комбобокс доступными пресетами процессов
+        self._refresh_process_presets()
+
+        # Выбор пресета скриншота
+        screenshot_frame = ttk.Frame(quick_capture_frame)
+        screenshot_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(screenshot_frame, text="📸 Пресет скриншота:").grid(row=0, column=0, padx=(0, 10), sticky=tk.E)
+        self.screenshot_preset_var = tk.StringVar()
+        self.screenshot_preset_combo = ttk.Combobox(screenshot_frame, textvariable=self.screenshot_preset_var, width=30, state="readonly")
+        self.screenshot_preset_combo.grid(row=0, column=1, sticky=tk.W)
+        
+        # Заполняем комбобокс доступными пресетами скриншотов
+        self._refresh_screenshot_presets_list()
+
+        # Кнопка быстрого захвата
+        capture_btn_frame = ttk.Frame(quick_capture_frame)
+        capture_btn_frame.pack(fill=tk.X, padx=10, pady=15)
+
+        self.quick_capture_btn = ttk.Button(
+            capture_btn_frame, 
+            text="🚀 Нормализовать + Скриншот", 
+            command=self._quick_capture
+        )
+        self.quick_capture_btn.pack(side=tk.LEFT, padx=10)
+
+        ttk.Button(capture_btn_frame, text="📸 Только скриншот по пресету", command=self._capture_only).pack(side=tk.LEFT, padx=10)
+
+        # Разделитель
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=10, pady=15)
+
+        # Поиск пресетов
+        search_frame = ttk.Frame(self)
+        search_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        self.search_var = tk.StringVar()
+        self.search_var.trace_add("write", self._on_search_changed)
+        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        self.search_entry.pack(fill=tk.X)
+        self.search_entry.insert(0, "🔍 Поиск пресетов скриншотов...")
+        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
+        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
+
+        # Список пресетов скриншотов
+        columns = ("name", "process_preset", "position", "size", "path")
+        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=8)
+
+        self.tree.heading("name", text="Название")
+        self.tree.heading("process_preset", text="Пресет процесса")
+        self.tree.heading("position", text="Позиция")
+        self.tree.heading("size", text="Размер")
+        self.tree.heading("path", text="Путь")
+
+        self.tree.column("name", width=150, minwidth=100)
+        self.tree.column("process_preset", width=120, minwidth=80)
+        self.tree.column("position", width=100, minwidth=80)
+        self.tree.column("size", width=90, minwidth=60)
+        self.tree.column("path", width=200, minwidth=100)
+
+        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
+
+        self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.tree.bind("<Double-1>", self._on_double_click)
+
+        # Кнопки управления
+        btn_frame = ttk.Frame(self)
+        btn_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        ttk.Button(btn_frame, text="➕ Добавить пресет", command=self._add_preset).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="✏️ Редактировать", command=self._edit_preset).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="🗑️ Удалить", command=self._delete_preset).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="📸 Сделать скриншот", command=self._capture_selected).pack(side=tk.RIGHT, padx=5)
+
+        self._selected_preset: Optional[ScreenshotPreset] = None
+
+    def _refresh_process_presets(self) -> None:
+        """Обновляет список пресетов процессов в комбобоксе."""
+        presets = self.process_preset_storage.get_all_presets()
+        values = [p.name for p in presets]
+        self.process_preset_combo["values"] = values
+        if values:
+            self.process_preset_combo.current(0)
+
+    def _refresh_screenshot_presets_list(self) -> None:
+        """Обновляет список пресетов скриншотов в комбобоксе."""
+        presets = self.preset_storage.get_all_presets()
+        values = [p.name for p in presets]
+        self.screenshot_preset_combo["values"] = values
+        if values:
+            self.screenshot_preset_combo.current(0)
+
+    def _on_search_focus_in(self, event):
+        if self.search_var.get().startswith("🔍"):
+            self.search_var.set("")
+
+    def _on_search_focus_out(self, event):
+        if not self.search_var.get():
+            self.search_var.set("🔍 Поиск пресетов скриншотов...")
+
+    def _on_search_changed(self, *args):
+        query = self.search_var.get()
+        if query.startswith("🔍"):
+            query = ""
+        self._filter_presets(query)
+
+    def _refresh_presets(self) -> None:
+        self._filter_presets(self.search_var.get() if not self.search_var.get().startswith("🔍") else "")
+        self._refresh_screenshot_presets_list()
+
+    def _filter_presets(self, query: str) -> None:
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+
+        presets = self.preset_storage.search_presets(query)
+        for preset in presets:
+            self.tree.insert("", tk.END, iid=preset.id, values=(
+                preset.name,
+                preset.process_preset_id,
+                f"({preset.x}, {preset.y})",
+                f"{preset.width}x{preset.height}",
+                preset.screenshot_path[:40] + "..." if len(preset.screenshot_path) > 40 else preset.screenshot_path,
+            ))
+
+    def _on_select(self, event) -> None:
+        selection = self.tree.selection()
+        if selection:
+            preset_id = selection[0]
+            self._selected_preset = self.preset_storage.get_preset(preset_id)
+
+    def _on_double_click(self, event) -> None:
+        self._capture_selected()
+
+    def _quick_capture(self) -> None:
+        """Выполняет быстрый захват: нормализация окна + скриншот."""
+        process_preset_name = self.process_preset_var.get().strip()
+        screenshot_preset_name = self.screenshot_preset_var.get().strip()
+
+        if not process_preset_name:
+            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет процесса")
+            return
+
+        if not screenshot_preset_name:
+            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет скриншота")
+            return
+
+        # Находим пресет процесса
+        process_preset = None
+        for p in self.process_preset_storage.get_all_presets():
+            if p.name == process_preset_name:
+                process_preset = p
+                break
+
+        if not process_preset:
+            messagebox.showerror("❌ Ошибка", f"Пресет процесса '{process_preset_name}' не найден")
+            return
+
+        # Находим пресет скриншота
+        screenshot_preset = None
+        for p in self.preset_storage.get_all_presets():
+            if p.name == screenshot_preset_name:
+                screenshot_preset = p
+                break
+
+        if not screenshot_preset:
+            messagebox.showerror("❌ Ошибка", f"Пресет скриншота '{screenshot_preset_name}' не найден")
+            return
+
+        # Проверяем, что пресет скриншота связан с тем же пресетом процесса
+        if screenshot_preset.process_preset_id != process_preset.id:
+            if not messagebox.askyesno(
+                "⚠️ Предупреждение",
+                f"Пресет скриншота '{screenshot_preset.name}' связан с другим пресетом процесса.\n"
+                f"Продолжить захват?"
+            ):
+                return
+
+        # Нормализуем окно
+        if not self.normalizer.apply_preset(process_preset):
+            messagebox.showerror(
+                "❌ Ошибка", 
+                f"Не удалось нормализовать окно. Процесс '{process_preset.process_name}' не найден."
+            )
+            return
+
+        # Даем окну время на перемещение
+        import time
+        time.sleep(0.3)
+
+        # Делаем скриншот
+        try:
+            from datetime import datetime
+            screenshot_id = f"{screenshot_preset.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            
+            self.preset_storage.capture_with_preset(
+                preset=screenshot_preset,
+                screenshot_manager=self.screenshot_manager,
+                screenshot_id=screenshot_id
+            )
+            
+            messagebox.showinfo(
+                "✅ Успех", 
+                f"Окно нормализовано и скриншот создан!\nПуть: {screenshot_preset.screenshot_path}"
+            )
+        except Exception as e:
+            messagebox.showerror("❌ Ошибка", f"Не удалось сделать скриншот: {e}")
+
+    def _capture_only(self) -> None:
+        """Делает скриншот только по пресету без нормализации."""
+        screenshot_preset_name = self.screenshot_preset_var.get().strip()
+
+        if not screenshot_preset_name:
+            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет скриншота")
+            return
+
+        # Находим пресет скриншота
+        screenshot_preset = None
+        for p in self.preset_storage.get_all_presets():
+            if p.name == screenshot_preset_name:
+                screenshot_preset = p
+                break
+
+        if not screenshot_preset:
+            messagebox.showerror("❌ Ошибка", f"Пресет скриншота '{screenshot_preset_name}' не найден")
+            return
+
+        # Делаем скриншот
+        try:
+            from datetime import datetime
+            screenshot_id = f"{screenshot_preset.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            
+            self.preset_storage.capture_with_preset(
+                preset=screenshot_preset,
+                screenshot_manager=self.screenshot_manager,
+                screenshot_id=screenshot_id
+            )
+            
+            messagebox.showinfo(
+                "✅ Успех", 
+                f"Скриншот создан!\nПуть: {screenshot_preset.screenshot_path}"
+            )
+        except Exception as e:
+            messagebox.showerror("❌ Ошибка", f"Не удалось сделать скриншот: {e}")
+
+    def _capture_selected(self) -> None:
+        """Делает скриншот по выбранному в списке пресету."""
+        if self._selected_preset is None:
+            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет для создания скриншота")
+            return
+
+        try:
+            from datetime import datetime
+            screenshot_id = f"{self._selected_preset.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            
+            self.preset_storage.capture_with_preset(
+                preset=self._selected_preset,
+                screenshot_manager=self.screenshot_manager,
+                screenshot_id=screenshot_id
+            )
+            
+            messagebox.showinfo(
+                "✅ Успех", 
+                f"Скриншот создан!\nПуть: {self._selected_preset.screenshot_path}"
+            )
+            self._refresh_presets()
+        except Exception as e:
+            messagebox.showerror("❌ Ошибка", f"Не удалось сделать скриншот: {e}")
+
+    def _add_preset(self) -> None:
+        """Открывает диалог для добавления нового пресета скриншота."""
+        dialog = NewScreenshotPresetDialog(self, self.process_preset_storage)
+        if dialog.result:
+            try:
+                self.preset_storage.add_preset(**dialog.result)
+                self._refresh_presets()
+                messagebox.showinfo("✅ Успех", "Пресет скриншота добавлен!")
+            except ValueError as e:
+                messagebox.showerror("❌ Ошибка", str(e))
+
+    def _edit_preset(self) -> None:
+        if self._selected_preset is None:
+            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет для редактирования")
+            return
+
+        dialog = EditScreenshotPresetDialog(self, self._selected_preset, self.process_preset_storage)
+        if dialog.result:
+            try:
+                self.preset_storage.update_preset(
+                    preset_id=self._selected_preset.id,
+                    **dialog.result
+                )
+                self._refresh_presets()
+                messagebox.showinfo("✅ Успех", "Пресет обновлен!")
+            except Exception as e:
+                messagebox.showerror("❌ Ошибка", str(e))
+
+    def _delete_preset(self) -> None:
+        if self._selected_preset is None:
+            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет для удаления")
+            return
+
+        if messagebox.askyesno("Подтверждение", f"Удалить пресет скриншота '{self._selected_preset.name}'?"):
+            self.preset_storage.remove_preset(self._selected_preset.id)
+            self._selected_preset = None
+            self._refresh_presets()
+
+
+class NewScreenshotPresetDialog(tk.Toplevel):
+    """Диалог создания нового пресета скриншота."""
+
+    def __init__(self, parent, process_preset_storage: PresetStorage):
+        super().__init__(parent)
+        self.result: Optional[dict] = None
+        self.process_preset_storage = process_preset_storage
+        
+        self.title("➕ Новый пресет скриншота")
+        self.geometry("550x500")
+        self.resizable(False, False)
+        
+        self.transient(parent)
+        self.grab_set()
+        
+        self._setup_ui()
+        
+        self.wait_window()
+
+    def _setup_ui(self) -> None:
+        main_frame = ttk.Frame(self, padding=15)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Название пресета
+        ttk.Label(main_frame, text="📛 Название пресета:").grid(row=0, column=0, sticky=tk.W, pady=8)
+        self.name_var = tk.StringVar()
+        ttk.Entry(main_frame, textvariable=self.name_var, width=50).grid(row=0, column=1, pady=8)
+        
+        # Выбор пресета процесса
+        ttk.Label(main_frame, text="🔗 Пресет процесса:").grid(row=1, column=0, sticky=tk.W, pady=8)
+        self.process_preset_var = tk.StringVar()
+        preset_combo = ttk.Combobox(main_frame, textvariable=self.process_preset_var, width=47, state="readonly")
+        preset_combo.grid(row=1, column=1, pady=8)
+        
+        # Заполняем комбобокс доступными пресетами процессов
+        presets = self.process_preset_storage.get_all_presets()
+        preset_values = [p.name for p in presets]
+        preset_combo["values"] = preset_values
+        if preset_values:
+            preset_combo.current(0)
+        
+        # Путь до скриншота
+        ttk.Label(main_frame, text="📁 Путь для сохранения:").grid(row=2, column=0, sticky=tk.W, pady=8)
+        self.path_var = tk.StringVar(value="~/Pictures/screenshots/")
+        path_frame = ttk.Frame(main_frame)
+        path_frame.grid(row=2, column=1, pady=8, sticky=tk.W)
+        ttk.Entry(path_frame, textvariable=self.path_var, width=40).pack(side=tk.LEFT)
+        ttk.Button(path_frame, text="...", command=self._browse_path).pack(side=tk.LEFT, padx=5)
+        
+        # Область выделения
+        area_frame = ttk.LabelFrame(main_frame, text="📐 Положение и размер области")
+        area_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=10, ipadx=10, ipady=10)
+        
+        # Координаты
+        coord_frame = ttk.Frame(area_frame)
+        coord_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5))
+        self.x_var = tk.StringVar(value="0")
+        ttk.Entry(coord_frame, textvariable=self.x_var, width=10).grid(row=0, column=1, padx=(0, 20))
+        
+        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5))
+        self.y_var = tk.StringVar(value="0")
+        ttk.Entry(coord_frame, textvariable=self.y_var, width=10).grid(row=0, column=3)
+        
+        # Размеры
+        size_frame = ttk.Frame(area_frame)
+        size_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5))
+        self.width_var = tk.StringVar(value="800")
+        ttk.Entry(size_frame, textvariable=self.width_var, width=10).grid(row=0, column=1, padx=(0, 20))
+        
+        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5))
+        self.height_var = tk.StringVar(value="600")
+        ttk.Entry(size_frame, textvariable=self.height_var, width=10).grid(row=0, column=3)
+        
+        # Кнопка выбора области
+        ttk.Button(area_frame, text="🎯 Выделить область мышью", command=self._select_area).pack(pady=10)
+        
+        # Описание
+        ttk.Label(main_frame, text="📝 Описание:").grid(row=4, column=0, sticky=tk.NW, pady=8)
+        self.desc_var = tk.StringVar()
+        desc_entry = ttk.Entry(main_frame, textvariable=self.desc_var, width=50)
+        desc_entry.grid(row=4, column=1, pady=8)
+        
+        # Кнопки
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=20)
+        
+        ttk.Button(btn_frame, text="✅ Сохранить", command=self._save).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
+        
+    def _browse_path(self) -> None:
+        """Открывает диалог выбора папки."""
+        from tkinter import filedialog
+        path = filedialog.askdirectory(initialdir="~/Pictures")
+        if path:
+            self.path_var.set(path)
+    
+    def _select_area(self) -> None:
+        """Открывает диалог для выделения области."""
+        def on_confirm(area: tuple[int, int, int, int]):
+            x, y, w, h = area
+            self.x_var.set(str(x))
+            self.y_var.set(str(y))
+            self.width_var.set(str(w))
+            self.height_var.set(str(h))
+        
+        dialog = ScreenAreaSelector(self, on_confirm)
+        
+    def _save(self) -> None:
+        """Сохраняет новый пресет."""
+        try:
+            name = self.name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Предупреждение", "Введите название пресета")
+                return
+                
+            process_preset_name = self.process_preset_var.get().strip()
+            if not process_preset_name:
+                messagebox.showwarning("Предупреждение", "Выберите пресет процесса")
+                return
+            
+            # Находим ID пресета процесса по имени
+            process_preset_id = None
+            for p in self.process_preset_storage.get_all_presets():
+                if p.name == process_preset_name:
+                    process_preset_id = p.id
+                    break
+            
+            if not process_preset_id:
+                messagebox.showerror("Ошибка", "Выбранный пресет процесса не найден")
+                return
+                
+            x = int(self.x_var.get())
+            y = int(self.y_var.get())
+            w = int(self.width_var.get())
+            h = int(self.height_var.get())
+            
+            if w <= 0 or h <= 0:
+                messagebox.showwarning("Предупреждение", "Размеры области должны быть положительными")
+                return
+            
+            screenshot_path = self.path_var.get().strip()
+            description = self.desc_var.get().strip()
+            
+            # Генерируем ID
+            from datetime import datetime
+            preset_id = f"screenshot_{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            preset_id = "".join(c if c.isalnum() or c in "_-" else "_" for c in preset_id)
+            
+            self.result = {
+                "preset_id": preset_id,
+                "name": name,
+                "screenshot_path": screenshot_path,
+                "process_preset_id": process_preset_id,
+                "x": x,
+                "y": y,
+                "width": w,
+                "height": h,
+                "description": description,
+            }
+            self.destroy()
+            
+        except ValueError as e:
+            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось сохранить пресет: {e}")
+            
+    def _cancel(self) -> None:
+        self.destroy()
+
+
+class EditScreenshotPresetDialog(tk.Toplevel):
+    """Диалог редактирования пресета скриншота."""
+
+    def __init__(self, parent, preset: ScreenshotPreset, process_preset_storage: PresetStorage):
+        super().__init__(parent)
+        self.result: Optional[dict] = None
+        self.preset = preset
+        self.process_preset_storage = process_preset_storage
+        
+        self.title("✏️ Редактировать пресет скриншота")
+        self.geometry("550x500")
+        self.resizable(False, False)
+        
+        self.transient(parent)
+        self.grab_set()
+        
+        self._setup_ui()
+        
+        self.wait_window()
+
+    def _setup_ui(self) -> None:
+        main_frame = ttk.Frame(self, padding=15)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Название пресета
+        ttk.Label(main_frame, text="📛 Название пресета:").grid(row=0, column=0, sticky=tk.W, pady=8)
+        self.name_var = tk.StringVar(value=self.preset.name)
+        ttk.Entry(main_frame, textvariable=self.name_var, width=50).grid(row=0, column=1, pady=8)
+        
+        # Выбор пресета процесса
+        ttk.Label(main_frame, text="🔗 Пресет процесса:").grid(row=1, column=0, sticky=tk.W, pady=8)
+        self.process_preset_var = tk.StringVar()
+        preset_combo = ttk.Combobox(main_frame, textvariable=self.process_preset_var, width=47, state="readonly")
+        preset_combo.grid(row=1, column=1, pady=8)
+        
+        # Заполняем комбобокс доступными пресетами процессов
+        presets = self.process_preset_storage.get_all_presets()
+        preset_values = [p.name for p in presets]
+        preset_combo["values"] = preset_values
+        
+        # Устанавливаем текущий пресет
+        current_process_preset_name = None
+        for p in presets:
+            if p.id == self.preset.process_preset_id:
+                current_process_preset_name = p.name
+                break
+        if current_process_preset_name and preset_values:
+            preset_combo.set(current_process_preset_name)
+        elif preset_values:
+            preset_combo.current(0)
+        
+        # Путь до скриншота
+        ttk.Label(main_frame, text="📁 Путь для сохранения:").grid(row=2, column=0, sticky=tk.W, pady=8)
+        self.path_var = tk.StringVar(value=self.preset.screenshot_path)
+        path_frame = ttk.Frame(main_frame)
+        path_frame.grid(row=2, column=1, pady=8, sticky=tk.W)
+        ttk.Entry(path_frame, textvariable=self.path_var, width=40).pack(side=tk.LEFT)
+        ttk.Button(path_frame, text="...", command=self._browse_path).pack(side=tk.LEFT, padx=5)
+        
+        # Область выделения
+        area_frame = ttk.LabelFrame(main_frame, text="📐 Положение и размер области")
+        area_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=10, ipadx=10, ipady=10)
+        
+        # Координаты
+        coord_frame = ttk.Frame(area_frame)
+        coord_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5))
+        self.x_var = tk.StringVar(value=str(self.preset.x))
+        ttk.Entry(coord_frame, textvariable=self.x_var, width=10).grid(row=0, column=1, padx=(0, 20))
+        
+        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5))
+        self.y_var = tk.StringVar(value=str(self.preset.y))
+        ttk.Entry(coord_frame, textvariable=self.y_var, width=10).grid(row=0, column=3)
+        
+        # Размеры
+        size_frame = ttk.Frame(area_frame)
+        size_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5))
+        self.width_var = tk.StringVar(value=str(self.preset.width))
+        ttk.Entry(size_frame, textvariable=self.width_var, width=10).grid(row=0, column=1, padx=(0, 20))
+        
+        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5))
+        self.height_var = tk.StringVar(value=str(self.preset.height))
+        ttk.Entry(size_frame, textvariable=self.height_var, width=10).grid(row=0, column=3)
+        
+        # Кнопка выбора области
+        ttk.Button(area_frame, text="🎯 Выделить область мышью", command=self._select_area).pack(pady=10)
+        
+        # Описание
+        ttk.Label(main_frame, text="📝 Описание:").grid(row=4, column=0, sticky=tk.NW, pady=8)
+        self.desc_var = tk.StringVar(value=self.preset.description)
+        desc_entry = ttk.Entry(main_frame, textvariable=self.desc_var, width=50)
+        desc_entry.grid(row=4, column=1, pady=8)
+        
+        # Кнопки
+        btn_frame = ttk.Frame(main_frame)
+        btn_frame.grid(row=5, column=0, columnspan=2, pady=20)
+        
+        ttk.Button(btn_frame, text="✅ Сохранить", command=self._save).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
+        
+    def _browse_path(self) -> None:
+        """Открывает диалог выбора папки."""
+        from tkinter import filedialog
+        path = filedialog.askdirectory(initialdir=self.preset.screenshot_path)
+        if path:
+            self.path_var.set(path)
+    
+    def _select_area(self) -> None:
+        """Открывает диалог для выделения области."""
+        def on_confirm(area: tuple[int, int, int, int]):
+            x, y, w, h = area
+            self.x_var.set(str(x))
+            self.y_var.set(str(y))
+            self.width_var.set(str(w))
+            self.height_var.set(str(h))
+        
+        dialog = ScreenAreaSelector(self, on_confirm)
+        
+    def _save(self) -> None:
+        """Сохраняет изменения."""
+        try:
+            name = self.name_var.get().strip()
+            if not name:
+                messagebox.showwarning("Предупреждение", "Введите название пресета")
+                return
+                
+            process_preset_name = self.process_preset_var.get().strip()
+            
+            # Находим ID пресета процесса по имени
+            process_preset_id = None
+            for p in self.process_preset_storage.get_all_presets():
+                if p.name == process_preset_name:
+                    process_preset_id = p.id
+                    break
+            
+            if not process_preset_id:
+                messagebox.showerror("Ошибка", "Выбранный пресет процесса не найден")
+                return
+                
+            x = int(self.x_var.get())
+            y = int(self.y_var.get())
+            w = int(self.width_var.get())
+            h = int(self.height_var.get())
+            
+            if w <= 0 or h <= 0:
+                messagebox.showwarning("Предупреждение", "Размеры области должны быть положительными")
+                return
+            
+            screenshot_path = self.path_var.get().strip()
+            description = self.desc_var.get().strip()
+            
+            self.result = {
+                "name": name,
+                "screenshot_path": screenshot_path,
+                "process_preset_id": process_preset_id,
+                "x": x,
+                "y": y,
+                "width": w,
+                "height": h,
+                "description": description,
+            }
+            self.destroy()
+            
+        except ValueError as e:
+            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {e}")
+            
+    def _cancel(self) -> None:
+        self.destroy()
+
+
 class NormalizerApp(ttk.Frame):
     """Основное приложение для нормализации процессов с вкладками."""
 
@@ -1243,6 +1942,7 @@ class NormalizerApp(ttk.Frame):
         self.normalizer = ProcessNormalizer()
         self.storage = PresetStorage()
         self.screenshot_manager = ScreenshotManager()
+        self.screenshot_preset_storage = ScreenshotPresetStorage()
 
         # Применяем современный стиль
         apply_modern_style(root)
@@ -1263,9 +1963,9 @@ class NormalizerApp(ttk.Frame):
         self.notebook.add(tab1, text="📋 Выбор процесса")
         self._setup_tab1(tab1)
 
-        # Вкладка 2: Пресеты
+        # Вкладка 2: Пресеты процессов
         tab2 = ttk.Frame(self.notebook)
-        self.notebook.add(tab2, text="💾 Управление пресетами")
+        self.notebook.add(tab2, text="💾 Пресеты процессов")
         self._setup_tab2(tab2)
 
         # Вкладка 3: Скриншоты
@@ -1273,10 +1973,26 @@ class NormalizerApp(ttk.Frame):
         self.notebook.add(tab3, text="📸 Скриншоты")
         self._setup_tab3(tab3)
 
+        # Вкладка 4: Пресеты скриншотов
+        tab4 = ttk.Frame(self.notebook)
+        self.notebook.add(tab4, text="🎯 Пресеты скриншотов")
+        self._setup_tab4(tab4)
+
     def _setup_tab3(self, parent) -> None:
         """Настройка третьей вкладки - управление скриншотами."""
         self.screenshot_manager_frame = ScreenshotManagerFrame(parent, self.screenshot_manager, self.storage)
         self.screenshot_manager_frame.pack(fill=tk.BOTH, expand=True)
+
+    def _setup_tab4(self, parent) -> None:
+        """Настройка четвертой вкладки - пресеты скриншотов и быстрый захват."""
+        self.screenshot_preset_manager_frame = ScreenshotPresetManagerFrame(
+            parent, 
+            self.screenshot_preset_storage, 
+            self.screenshot_manager,
+            self.normalizer,
+            self.storage
+        )
+        self.screenshot_preset_manager_frame.pack(fill=tk.BOTH, expand=True)
 
     def _setup_tab1(self, parent) -> None:
         """Настройка первой вкладки - выбор процесса и настройка позиции."""
