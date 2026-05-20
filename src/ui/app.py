@@ -356,16 +356,16 @@ class PositionSizeFrame(ttk.LabelFrame):
         self.height_var.set(str(window.height))
 
 
-class ScreenshotAreaSelector(tk.Toplevel):
-    """Диалог для выделения области экрана для скриншота."""
+class ScreenAreaSelector(tk.Toplevel):
+    """Диалог для выделения области экрана с предпросмотром."""
 
     def __init__(self, parent, on_confirm: Callable[[tuple[int, int, int, int]], None]):
         super().__init__(parent)
         self.on_confirm = on_confirm
         self.result: Optional[tuple[int, int, int, int]] = None
         
-        self.title("📸 Выделение области для скриншота")
-        self.geometry("800x600")
+        self.title("📸 Выделение области экрана")
+        self.geometry("900x650")
         
         self.transient(parent)
         self.grab_set()
@@ -383,7 +383,7 @@ class ScreenshotAreaSelector(tk.Toplevel):
         # Инструкция
         ttk.Label(
             main_frame, 
-            text="Выделите область для скриншота:",
+            text="Выделите область экрана для скриншота:",
             font=("Segoe UI", 12, "bold")
         ).pack(pady=(0, 10))
         
@@ -431,8 +431,8 @@ class ScreenshotAreaSelector(tk.Toplevel):
         ttk.Button(preset_frame, text="¼ ↘", command=self._set_quarter_bottom_right).pack(side=tk.LEFT, padx=3, pady=3)
         ttk.Button(preset_frame, text="Полный экран", command=self._set_fullscreen).pack(side=tk.LEFT, padx=3, pady=3)
         
-        # Canvas для предпросмотра
-        preview_frame = ttk.LabelFrame(main_frame, text="👁️ Предпросмотр")
+        # Canvas для предпросмотра (схематичное изображение экрана)
+        preview_frame = ttk.LabelFrame(main_frame, text="👁️ Схема области")
         preview_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
         self.canvas = tk.Canvas(preview_frame, bg="#1a1c29", highlightthickness=0)
@@ -457,7 +457,7 @@ class ScreenshotAreaSelector(tk.Toplevel):
         
         ttk.Button(btn_frame, text="✅ Подтвердить область", command=self._confirm).pack(side=tk.LEFT, padx=10)
         ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="🔍 Показать превью", command=self._show_preview).pack(side=tk.RIGHT, padx=10)
+        ttk.Button(btn_frame, text="🔍 Показать превью на экране", command=self._show_real_preview).pack(side=tk.RIGHT, padx=10)
         
         # Обновляем предпросмотр при изменении значений
         self.x_var.trace_add("write", self._update_preview)
@@ -603,8 +603,8 @@ class ScreenshotAreaSelector(tk.Toplevel):
         except ValueError:
             pass
             
-    def _show_preview(self) -> None:
-        """Показывает реальное превью области на экране."""
+    def _show_real_preview(self) -> None:
+        """Показывает реальное превью области на экране (красная рамка)."""
         try:
             x = int(self.x_var.get())
             y = int(self.y_var.get())
@@ -895,7 +895,7 @@ class NewScreenshotDialog(tk.Toplevel):
             self.width_var.set(str(w))
             self.height_var.set(str(h))
         
-        dialog = ScreenshotAreaSelector(self, on_confirm)
+        dialog = ScreenAreaSelector(self, on_confirm)
         
     def _capture(self) -> None:
         """Делает скриншот с указанными параметрами."""
