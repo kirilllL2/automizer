@@ -1,0 +1,4 @@
+# This file ensures the presets directory is tracked by Git.
+# Screenshot and process normalization presets will be stored here:
+# - presets.json (process normalization presets)
+# - screenshot_presets.json (screenshot presets)
