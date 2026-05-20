@@ -1,0 +1,30 @@
+# Глобальная конфигурация приложения
+# Эти значения могут быть переопределены через переменные окружения или пользовательские конфиги
+
+app:
+  name: "Automizer"
+  version: "0.1.0"
+  debug: false
+  log_level: "INFO"
+
+# Пути к данным и кэшу
+paths:
+  data_dir: "~/.automizer/data"
+  cache_dir: "~/.automizer/cache"
+  config_dir: "~/.automizer/config"
+  logs_dir: "~/.automizer/logs"
+
+# Настройки базы данных (если потребуется)
+database:
+  type: "sqlite"
+  path: "~/.automizer/data/automizer.db"
+
+# UI настройки (для десктопного приложения)
+ui:
+  theme: "system"  # system, light, dark
+  language: "ru"
+  window:
+    width: 1200
+    height: 800
+    min_width: 800
+    min_height: 600
