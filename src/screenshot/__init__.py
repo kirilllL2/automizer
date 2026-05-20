@@ -179,12 +179,22 @@ class ScreenshotManager:
             root.attributes("-fullscreen", True)
             root.attributes("-topmost", True)
             root.overrideredirect(True)
-            root.configure(bg="red")
-            root.wm_attributes("-alpha", 0.3)  # Прозрачность
+            root.configure(bg="black")
+            root.wm_attributes("-alpha", 0.0)  # Полностью прозрачный фон
 
-            # Вычисляем позицию для красного квадрата
-            canvas = tk.Canvas(root, bg="red", highlightthickness=0)
-            canvas.place(x=x, y=y, width=width, height=height)
+            # Создаем Canvas на весь экран
+            canvas = tk.Canvas(root, bg="black", highlightthickness=0)
+            canvas.pack(fill=tk.BOTH, expand=True)
+
+            # Рисуем красный прямоугольник (рамку) вокруг целевой области
+            # Используем create_rectangle с outline (красная рамка) и fill (полупрозрачный красный)
+            canvas.create_rectangle(
+                x, y, x + width, y + height,
+                outline="red",
+                width=3,
+                fill="red",
+                stipple="gray50",  # Узор для полупрозрачности
+            )
 
             # Обновляем окно
             root.update()
