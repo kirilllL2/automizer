@@ -40,9 +40,11 @@ class ScreenshotPresetStorage:
 
     def __init__(self, storage_path: Optional[Path] = None):
         if storage_path is None:
-            config_dir = Path.home() / ".automizer" / "config"
-            config_dir.mkdir(parents=True, exist_ok=True)
-            storage_path = config_dir / "screenshot_presets.json"
+            # Используем путь в репозитории для хранения пресетов
+            repo_root = Path(__file__).parent.parent.parent
+            presets_dir = repo_root / "presets"
+            presets_dir.mkdir(parents=True, exist_ok=True)
+            storage_path = presets_dir / "screenshot_presets.json"
 
         self.storage_path = storage_path
         self._presets: dict[str, ScreenshotPreset] = {}
