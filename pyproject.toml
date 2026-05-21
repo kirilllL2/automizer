@@ -1,13 +1,14 @@
 [project]
 name = "automizer"
 version = "0.1.0"
-description = "Большое десктопное Python приложение"
+description = "Большое десктопное Python приложение с современным PyQt5 интерфейсом"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "pyyaml>=6.0",
-    "pywin32>=306",
+    "pywin32>=306; sys_platform == 'win32'",
     "pillow>=10.0.0",
+    "pyqt5>=5.15.0",
 ]
 
 [project.optional-dependencies]
