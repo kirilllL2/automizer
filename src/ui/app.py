@@ -1,22 +1,83 @@
 """
-UI модуль для управления нормализацией процессов и скриншотами.
+UI модуль для управления нормализацией процессов и скриншотами на PyQt5.
 
-Предоставляет Tkinter интерфейс с вкладками:
-- Вкладка 1: Выбор процесса из списка с поиском и настройка позиции/размера
-- Вкладка 2: Применение пресетов и управление ими
-- Вкладка 3: Работа со скриншотами (выделение области, создание, привязка к пресету)
+Современный дизайн с градиентами, тенями и овальными кнопками.
 
-Также поддерживает:
-- Сохранение текущих параметров как пресет
-- Редактирование и удаление пресетов
-- Создание скриншотов с выделением области
-- Привязка скриншотов к пресетам процессов
-- Стильный современный дизайн
+Функциональные требования:
+==========================
+
+1. Управление окнами процессов:
+   - Список всех открытых окон с поиском по названию
+   - Отображение информации: заголовок, позиция (X, Y), размер (Ширина x Высота)
+   - Кнопка обновления списка окон
+   - Выделение окна из списка с автоматическим заполнением параметров
+
+2. Настройка позиции и размера:
+   - Поля ввода координат X, Y
+   - Поля ввода ширины и высоты
+   - Предустановленные размеры:
+     * Половина экрана (слева/справа)
+     * Четверти экрана (все 4 угла)
+     * Полный экран
+   - Кнопка "Нормализовать окно" для применения настроек
+   - Кнопка "Сохранить как пресет"
+
+3. Управление пресетами процессов:
+   - Список сохраненных пресетов с поиском
+   - Отображение: имя, процесс, позиция/размер
+   - Применение пресета к окну
+   - Редактирование пресета
+   - Удаление пресета
+   - Двойной клик для быстрого применения
+
+4. Работа со скриншотами:
+   - Список созданных скриншотов с поиском
+   - Отображение: название, привязанный пресет, размер, дата создания
+   - Создание нового скриншота с выделением области
+   - Диалог выделения области с:
+     * Полями ввода координат и размеров
+     * Предустановленными размерами
+     * Схематичным предпросмотром на canvas
+     * Реальным превью на экране (полупрозрачная рамка)
+   - Редактирование описания скриншота
+   - Удаление скриншота
+   - Открытие файла скриншота
+   - Открытие папки со скриншотами
+
+5. Пресеты скриншотов:
+   - Быстрый захват: нормализация + скриншот по пресету
+   - Список пресетов скриншотов
+   - Создание/редактирование/удаление пресетов
+   - Привязка к пресету процесса
+   - Настройка пути сохранения
+   - Настройка области захвата
+
+6. Дизайн и UX:
+   - Современный темный интерфейс
+   - Градиентные фоны для панелей и кнопок
+   - Тени для элементов интерфейса
+   - Овальные кнопки с анимацией при наведении
+   - Плавные переходы между состояниями
+   - Иконки для всех действий
+   - Всплывающие уведомления о результатах операций
+   - Адаптивная верстка с изменяемым размером окна
 """
 
-import tkinter as tk
-from tkinter import ttk, messagebox, font
-from typing import Optional, Callable
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QTabWidget, QPushButton, QLabel, QLineEdit, QTableWidget, QTableWidgetItem,
+    QHeaderView, QFrame, QScrollArea, QComboBox, QFileDialog, QMessageBox,
+    QDialog, QDialogButtonBox, QFormLayout, QGroupBox, QSplitter, QToolBar,
+    QStatusBar, QMenu, QMenuBar, QAction, QSystemTrayIcon, QGraphicsDropShadowEffect,
+    QSizePolicy, QSpacerItem, QCheckBox, QRadioButton, QButtonGroup
+)
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QPropertyAnimation, QEasingCurve, QRectF, QSize
+from PyQt5.QtGui import (
+    QFont, QColor, QPalette, QLinearGradient, QBrush, QIcon, QPixmap, 
+    QPainter, QPainterPath, QRegion, QCursor, QFontDatabase
+)
+import sys
+import os
 
 from src.window_manager import WindowManager, WindowInfo
 from src.normalizer import ProcessNormalizer, NormalizationPreset
@@ -25,126 +86,224 @@ from src.screenshot import ScreenshotManager, ScreenshotInfo
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
-# Стили приложения
-STYLE_COLORS = {
-    "bg_primary": "#2b2d42",
-    "bg_secondary": "#3d405b",
-    "bg_accent": "#5e6472",
-    "fg_primary": "#edf2f4",
-    "fg_secondary": "#a8b2c1",
-    "accent": "#00adb5",
-    "accent_hover": "#00d4dc",
-    "success": "#4caf50",
-    "warning": "#ff9800",
-    "danger": "#f44336",
-}
+# ============================================
+# СТИЛИ И ЦВЕТОВАЯ ПАЛИТРА
+# ============================================
+
+class StyleColors:
+    """Цветовая палитра приложения."""
+    # Основные цвета
+    BG_PRIMARY = "#1a1b26"      # Темный фон
+    BG_SECONDARY = "#24283b"    # Вторичный фон
+    BG_TERTIARY = "#2f3549"     # Третичный фон
+    BG_HOVER = "#414868"        # Фон при наведении
+    
+    # Акцентные цвета
+    ACCENT_PRIMARY = "#7aa2f7"  # Основной акцент (синий)
+    ACCENT_SECONDARY = "#bb9af7"  # Вторичный акцент (фиолетовый)
+    ACCENT_GRADIENT_START = "#7aa2f7"
+    ACCENT_GRADIENT_END = "#bb9af7"
+    
+    # Текст
+    TEXT_PRIMARY = "#c0caf5"    # Основной текст
+    TEXT_SECONDARY = "#a9b1d6"  # Вторичный текст
+    TEXT_MUTED = "#565f89"      # Приглушенный текст
+    
+    # Статусы
+    SUCCESS = "#9ece6a"         # Успех (зеленый)
+    WARNING = "#e0af68"         # Предупреждение (желтый)
+    DANGER = "#f7768e"          # Опасность (красный)
+    INFO = "#7dcfff"            # Информация (голубой)
+    
+    # Границы
+    BORDER = "#414868"
+    BORDER_LIGHT = "#565f89"
 
 
-def apply_modern_style(widget: tk.Widget) -> None:
-    """Применяет современный стиль к виджету."""
-    style = ttk.Style()
+# ============================================
+# КАСТОМНЫЕ ВИДЖЕТЫ
+# ============================================
+
+class GradientButton(QPushButton):
+    """Кнопка с градиентным фоном и закругленными углами."""
     
-    # Настройка темы
-    style.theme_use('clam')
+    def __init__(self, text: str = "", parent=None, gradient_colors=None):
+        super().__init__(text, parent)
+        self.gradient_colors = gradient_colors or [
+            StyleColors.ACCENT_GRADIENT_START,
+            StyleColors.ACCENT_GRADIENT_END
+        ]
+        self.hover_color = "#9abdf7"
+        self._setup_style()
+        self._setup_shadow()
+        
+    def _setup_style(self):
+        """Настройка стиля кнопки."""
+        self.setFixedHeight(45)
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        
+        # Закругленные углы
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {self.gradient_colors[0]},
+                    stop:1 {self.gradient_colors[1]});
+                border: none;
+                border-radius: 23px;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                padding: 10px 25px;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {self.hover_color},
+                    stop:1 #c9a9ff);
+            }}
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #5a82d7,
+                    stop:1 #9a7ad7);
+            }}
+            QPushButton:disabled {{
+                background: {StyleColors.BORDER};
+                color: {StyleColors.TEXT_MUTED};
+            }}
+        """)
+        
+    def _setup_shadow(self):
+        """Добавление тени."""
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(15)
+        shadow.setXOffset(0)
+        shadow.setYOffset(4)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        self.setGraphicsEffect(shadow)
+
+
+class SecondaryButton(QPushButton):
+    """Вторичная кнопка с прозрачным фоном."""
     
-    # TFrame
-    style.configure(
-        "TFrame",
-        background=STYLE_COLORS["bg_secondary"]
-    )
+    def __init__(self, text: str = "", parent=None):
+        super().__init__(text, parent)
+        self._setup_style()
+        
+    def _setup_style(self):
+        self.setFixedHeight(40)
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: 2px solid {StyleColors.BORDER};
+                border-radius: 20px;
+                color: {StyleColors.TEXT_PRIMARY};
+                font-size: 13px;
+                font-weight: 600;
+                padding: 8px 20px;
+            }}
+            QPushButton:hover {{
+                border-color: {StyleColors.ACCENT_PRIMARY};
+                background: rgba(122, 162, 247, 0.1);
+            }}
+            QPushButton:pressed {{
+                background: rgba(122, 162, 247, 0.2);
+            }}
+        """)
+
+
+class ModernEntry(QLineEdit):
+    """Современное поле ввода."""
     
-    # TLabel
-    style.configure(
-        "TLabel",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["fg_primary"],
-        font=("Segoe UI", 10)
-    )
+    def __init__(self, placeholder: str = "", parent=None):
+        super().__init__(parent)
+        self.setPlaceholderText(placeholder)
+        self._setup_style()
+        
+    def _setup_style(self):
+        self.setFixedHeight(45)
+        self.setStyleSheet(f"""
+            QLineEdit {{
+                background: {StyleColors.BG_PRIMARY};
+                border: 2px solid {StyleColors.BORDER};
+                border-radius: 12px;
+                color: {StyleColors.TEXT_PRIMARY};
+                font-size: 14px;
+                padding: 12px 15px;
+            }}
+            QLineEdit:focus {{
+                border-color: {StyleColors.ACCENT_PRIMARY};
+            }}
+            QLineEdit:hover {{
+                border-color: {StyleColors.BORDER_LIGHT};
+            }}
+        """)
+
+
+class ModernTable(QTableWidget):
+    """Современная таблица."""
     
-    # TLabelFrame
-    style.configure(
-        "TLabelframe",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["accent"],
-        bordercolor=STYLE_COLORS["bg_accent"],
-        lightcolor=STYLE_COLORS["bg_accent"],
-        darkcolor=STYLE_COLORS["bg_accent"],
-    )
-    style.configure(
-        "TLabelframe.Label",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["accent"],
-        font=("Segoe UI", 11, "bold")
-    )
-    
-    # TButton
-    style.configure(
-        "TButton",
-        background=STYLE_COLORS["accent"],
-        foreground=STYLE_COLORS["fg_primary"],
-        bordercolor=STYLE_COLORS["accent"],
-        focuscolor=STYLE_COLORS["accent_hover"],
-        padding=(15, 8),
-        font=("Segoe UI", 10, "bold")
-    )
-    style.map(
-        "TButton",
-        background=[("active", STYLE_COLORS["accent_hover"])],
-        foreground=[("active", STYLE_COLORS["fg_primary"])],
-    )
-    
-    # TEntry
-    style.configure(
-        "TEntry",
-        fieldbackground="#1a1c29",
-        foreground=STYLE_COLORS["fg_primary"],
-        bordercolor=STYLE_COLORS["bg_accent"],
-        lightcolor=STYLE_COLORS["bg_accent"],
-        darkcolor=STYLE_COLORS["bg_accent"],
-        padding=8,
-        insertcolor=STYLE_COLORS["fg_primary"],
-    )
-    
-    # Treeview
-    style.configure(
-        "Treeview",
-        background="#1a1c29",
-        foreground=STYLE_COLORS["fg_primary"],
-        fieldbackground="#1a1c29",
-        rowheight=28,
-        font=("Segoe UI", 10),
-    )
-    style.configure(
-        "Treeview.Heading",
-        background=STYLE_COLORS["bg_accent"],
-        foreground=STYLE_COLORS["fg_primary"],
-        font=("Segoe UI", 10, "bold"),
-        padding=8,
-    )
-    style.map(
-        "Treeview",
-        background=[("selected", STYLE_COLORS["accent"])],
-        foreground=[("selected", STYLE_COLORS["fg_primary"])],
-    )
-    
-    # Notebook (вкладки)
-    style.configure(
-        "TNotebook",
-        background=STYLE_COLORS["bg_secondary"],
-        borderwidth=0,
-    )
-    style.configure(
-        "TNotebook.Tab",
-        background=STYLE_COLORS["bg_accent"],
-        foreground=STYLE_COLORS["fg_secondary"],
-        padding=(20, 10),
-        font=("Segoe UI", 11, "bold"),
-    )
-    style.map(
-        "TNotebook.Tab",
-        background=[("selected", STYLE_COLORS["accent"])],
-        foreground=[("selected", STYLE_COLORS["fg_primary"])],
-    )
+    def __init__(self, columns: list, parent=None):
+        super().__init__(parent)
+        self._setup_style(columns)
+        
+    def _setup_style(self, columns: list):
+        self.setColumnCount(len(columns))
+        self.setHorizontalHeaderLabels(columns)
+        
+        # Стиль заголовка
+        header = self.horizontalHeader()
+        header.setStyleSheet(f"""
+            QHeaderView::section {{
+                background: {StyleColors.BG_TERTIARY};
+                color: {StyleColors.TEXT_PRIMARY};
+                font-size: 13px;
+                font-weight: bold;
+                padding: 12px;
+                border: none;
+                border-bottom: 2px solid {StyleColors.BORDER};
+            }}
+        """)
+        
+        # Стиль таблицы
+        self.setStyleSheet(f"""
+            QTableWidget {{
+                background: {StyleColors.BG_PRIMARY};
+                color: {StyleColors.TEXT_PRIMARY};
+                border: none;
+                border-radius: 12px;
+                gridline-color: {StyleColors.BORDER};
+            }}
+            QTableWidget::item {{
+                padding: 10px;
+                border-bottom: 1px solid {StyleColors.BORDER};
+            }}
+            QTableWidget::item:selected {{
+                background: rgba(122, 162, 247, 0.2);
+                color: {StyleColors.ACCENT_PRIMARY};
+            }}
+            QTableWidget::item:hover {{
+                background: rgba(122, 162, 247, 0.1);
+            }}
+            QScrollBar:vertical {{
+                background: {StyleColors.BG_SECONDARY};
+                width: 10px;
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {StyleColors.BORDER};
+                border-radius: 5px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: {StyleColors.BORDER_LIGHT};
+            }}
+        """)
+        
+        # Настройки отображения
+        self.setSelectionBehavior(QTableWidget.SelectRows)
+        self.setSelectionMode(QTableWidget.SingleSelection)
+        self.verticalHeader().setVisible(False)
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        self.setAlternatingRowColors(True)
 
 
 class ProcessSelectorFrame(ttk.LabelFrame):
