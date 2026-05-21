@@ -1,3 +1,50 @@
-```
-=10.0.0
+```gitignore
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Compiled files
+*.o
+*.obj
+*.out
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+
+# Dependencies
+venv/
+.venv/
+.env
+.env.local
+*.env.*
+
+# Build artifacts
+dist/
+build/
+target/
+.coverage
+coverage/
+htmlcov/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# System files
+.DS_Store
+Thumbs.db
+*.tmp
+*.log
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+*.pytest_cache/
 ```
