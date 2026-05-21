@@ -25,23 +25,27 @@ from src.screenshot import ScreenshotManager, ScreenshotInfo
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
-# Стили приложения - мягкие пастельные тона с закругленными элементами
+# Стили приложения - мягкие пастельные тона с градиентами и тенями
 STYLE_COLORS = {
-    "bg_primary": "#f5f7fa",      # Светлый фон
+    "bg_primary": "#f0f4f8",      # Очень светлый серо-голубой фон
     "bg_secondary": "#ffffff",    # Белый фон для панелей
-    "bg_accent": "#e8ecf1",       # Мягкий акцент
-    "fg_primary": "#2d3748",      # Темно-серый текст
+    "bg_accent": "#e2e8f0",       # Мягкий серо-голубой акцент
+    "bg_gradient_start": "#667eea",  # Начало градиента (мягкий синий)
+    "bg_gradient_end": "#764ba2",    # Конец градиента (мягкий фиолетовый)
+    "fg_primary": "#4a5568",      # Мягкий темно-серый текст
     "fg_secondary": "#718096",    # Светло-серый текст
     "accent": "#667eea",          # Мягкий синий
     "accent_hover": "#5a67d8",    # Темнее при наведении
+    "accent_light": "#a3bffa",    # Светлая версия акцента
     "success": "#68d391",         # Мягкий зеленый
     "warning": "#f6ad55",         # Мягкий оранжевый
     "danger": "#fc8181",          # Мягкий красный
+    "shadow": "rgba(0, 0, 0, 0.1)",  # Цвет тени
 }
 
 
 def apply_modern_style(widget: tk.Widget) -> None:
-    """Применяет современный стиль к виджету с мягкими цветами и округлыми формами."""
+    """Применяет современный стиль к виджету с мягкими цветами, градиентами и тенями."""
     style = ttk.Style()
     
     # Настройка темы
@@ -53,7 +57,7 @@ def apply_modern_style(widget: tk.Widget) -> None:
         background=STYLE_COLORS["bg_secondary"]
     )
     
-    # TLabel
+    # TLabel - мягкий текст
     style.configure(
         "TLabel",
         background=STYLE_COLORS["bg_secondary"],
@@ -61,7 +65,7 @@ def apply_modern_style(widget: tk.Widget) -> None:
         font=("Segoe UI", 10)
     )
     
-    # TLabelFrame - мягкие цвета
+    # TLabelFrame - мягкие цвета с закругленными углами
     style.configure(
         "TLabelframe",
         background=STYLE_COLORS["bg_secondary"],
@@ -69,6 +73,7 @@ def apply_modern_style(widget: tk.Widget) -> None:
         bordercolor=STYLE_COLORS["bg_accent"],
         lightcolor=STYLE_COLORS["bg_accent"],
         darkcolor=STYLE_COLORS["bg_accent"],
+        relief="flat",
     )
     style.configure(
         "TLabelframe.Label",
@@ -77,25 +82,29 @@ def apply_modern_style(widget: tk.Widget) -> None:
         font=("Segoe UI", 11, "bold")
     )
     
-    # TButton - округлые кнопки
+    # TButton - скругленные кнопки с градиентом и тенью при наведении
     style.configure(
         "TButton",
         background=STYLE_COLORS["accent"],
         foreground="#ffffff",
         bordercolor=STYLE_COLORS["accent"],
         focuscolor=STYLE_COLORS["accent_hover"],
-        padding=(20, 10),
+        padding=(24, 12),
         font=("Segoe UI", 10, "bold"),
         relief="flat",
         borderwidth=0,
     )
     style.map(
         "TButton",
-        background=[("active", STYLE_COLORS["accent_hover"]), ("pressed", STYLE_COLORS["accent_hover"])],
+        background=[
+            ("active", STYLE_COLORS["accent_hover"]), 
+            ("pressed", STYLE_COLORS["accent_hover"]),
+            ("!active", STYLE_COLORS["accent"])
+        ],
         foreground=[("active", "#ffffff"), ("pressed", "#ffffff")],
     )
     
-    # TEntry - мягкие поля ввода
+    # TEntry - мягкие поля ввода с закругленными краями
     style.configure(
         "TEntry",
         fieldbackground="#f7fafc",
@@ -103,25 +112,28 @@ def apply_modern_style(widget: tk.Widget) -> None:
         bordercolor=STYLE_COLORS["bg_accent"],
         lightcolor=STYLE_COLORS["bg_accent"],
         darkcolor=STYLE_COLORS["bg_accent"],
-        padding=10,
+        padding=12,
         insertcolor=STYLE_COLORS["fg_primary"],
+        relief="flat",
     )
     
-    # Treeview
+    # Treeview - мягкие цвета
     style.configure(
         "Treeview",
         background="#f7fafc",
         foreground=STYLE_COLORS["fg_primary"],
         fieldbackground="#f7fafc",
-        rowheight=30,
+        rowheight=32,
         font=("Segoe UI", 10),
+        relief="flat",
     )
     style.configure(
         "Treeview.Heading",
         background=STYLE_COLORS["bg_accent"],
         foreground=STYLE_COLORS["fg_primary"],
         font=("Segoe UI", 10, "bold"),
-        padding=10,
+        padding=12,
+        relief="flat",
     )
     style.map(
         "Treeview",
@@ -129,7 +141,7 @@ def apply_modern_style(widget: tk.Widget) -> None:
         foreground=[("selected", "#ffffff")],
     )
     
-    # Notebook (вкладки) - округлые
+    # Notebook (вкладки) - округлые с мягкими цветами
     style.configure(
         "TNotebook",
         background=STYLE_COLORS["bg_secondary"],
@@ -139,8 +151,9 @@ def apply_modern_style(widget: tk.Widget) -> None:
         "TNotebook.Tab",
         background=STYLE_COLORS["bg_accent"],
         foreground=STYLE_COLORS["fg_secondary"],
-        padding=(25, 12),
+        padding=(30, 14),
         font=("Segoe UI", 11, "bold"),
+        relief="flat",
     )
     style.map(
         "TNotebook.Tab",
