@@ -25,29 +25,29 @@ from src.screenshot import ScreenshotManager, ScreenshotInfo
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
-# Стили приложения
+# Стили приложения - мягкие пастельные тона с закругленными элементами
 STYLE_COLORS = {
-    "bg_primary": "#2b2d42",
-    "bg_secondary": "#3d405b",
-    "bg_accent": "#5e6472",
-    "fg_primary": "#edf2f4",
-    "fg_secondary": "#a8b2c1",
-    "accent": "#00adb5",
-    "accent_hover": "#00d4dc",
-    "success": "#4caf50",
-    "warning": "#ff9800",
-    "danger": "#f44336",
+    "bg_primary": "#f5f7fa",      # Светлый фон
+    "bg_secondary": "#ffffff",    # Белый фон для панелей
+    "bg_accent": "#e8ecf1",       # Мягкий акцент
+    "fg_primary": "#2d3748",      # Темно-серый текст
+    "fg_secondary": "#718096",    # Светло-серый текст
+    "accent": "#667eea",          # Мягкий синий
+    "accent_hover": "#5a67d8",    # Темнее при наведении
+    "success": "#68d391",         # Мягкий зеленый
+    "warning": "#f6ad55",         # Мягкий оранжевый
+    "danger": "#fc8181",          # Мягкий красный
 }
 
 
 def apply_modern_style(widget: tk.Widget) -> None:
-    """Применяет современный стиль к виджету."""
+    """Применяет современный стиль к виджету с мягкими цветами и округлыми формами."""
     style = ttk.Style()
     
     # Настройка темы
     style.theme_use('clam')
     
-    # TFrame
+    # TFrame - белый фон
     style.configure(
         "TFrame",
         background=STYLE_COLORS["bg_secondary"]
@@ -61,7 +61,7 @@ def apply_modern_style(widget: tk.Widget) -> None:
         font=("Segoe UI", 10)
     )
     
-    # TLabelFrame
+    # TLabelFrame - мягкие цвета
     style.configure(
         "TLabelframe",
         background=STYLE_COLORS["bg_secondary"],
@@ -77,41 +77,43 @@ def apply_modern_style(widget: tk.Widget) -> None:
         font=("Segoe UI", 11, "bold")
     )
     
-    # TButton
+    # TButton - округлые кнопки
     style.configure(
         "TButton",
         background=STYLE_COLORS["accent"],
-        foreground=STYLE_COLORS["fg_primary"],
+        foreground="#ffffff",
         bordercolor=STYLE_COLORS["accent"],
         focuscolor=STYLE_COLORS["accent_hover"],
-        padding=(15, 8),
-        font=("Segoe UI", 10, "bold")
+        padding=(20, 10),
+        font=("Segoe UI", 10, "bold"),
+        relief="flat",
+        borderwidth=0,
     )
     style.map(
         "TButton",
-        background=[("active", STYLE_COLORS["accent_hover"])],
-        foreground=[("active", STYLE_COLORS["fg_primary"])],
+        background=[("active", STYLE_COLORS["accent_hover"]), ("pressed", STYLE_COLORS["accent_hover"])],
+        foreground=[("active", "#ffffff"), ("pressed", "#ffffff")],
     )
     
-    # TEntry
+    # TEntry - мягкие поля ввода
     style.configure(
         "TEntry",
-        fieldbackground="#1a1c29",
+        fieldbackground="#f7fafc",
         foreground=STYLE_COLORS["fg_primary"],
         bordercolor=STYLE_COLORS["bg_accent"],
         lightcolor=STYLE_COLORS["bg_accent"],
         darkcolor=STYLE_COLORS["bg_accent"],
-        padding=8,
+        padding=10,
         insertcolor=STYLE_COLORS["fg_primary"],
     )
     
     # Treeview
     style.configure(
         "Treeview",
-        background="#1a1c29",
+        background="#f7fafc",
         foreground=STYLE_COLORS["fg_primary"],
-        fieldbackground="#1a1c29",
-        rowheight=28,
+        fieldbackground="#f7fafc",
+        rowheight=30,
         font=("Segoe UI", 10),
     )
     style.configure(
@@ -119,15 +121,15 @@ def apply_modern_style(widget: tk.Widget) -> None:
         background=STYLE_COLORS["bg_accent"],
         foreground=STYLE_COLORS["fg_primary"],
         font=("Segoe UI", 10, "bold"),
-        padding=8,
+        padding=10,
     )
     style.map(
         "Treeview",
         background=[("selected", STYLE_COLORS["accent"])],
-        foreground=[("selected", STYLE_COLORS["fg_primary"])],
+        foreground=[("selected", "#ffffff")],
     )
     
-    # Notebook (вкладки)
+    # Notebook (вкладки) - округлые
     style.configure(
         "TNotebook",
         background=STYLE_COLORS["bg_secondary"],
@@ -137,13 +139,13 @@ def apply_modern_style(widget: tk.Widget) -> None:
         "TNotebook.Tab",
         background=STYLE_COLORS["bg_accent"],
         foreground=STYLE_COLORS["fg_secondary"],
-        padding=(20, 10),
+        padding=(25, 12),
         font=("Segoe UI", 11, "bold"),
     )
     style.map(
         "TNotebook.Tab",
         background=[("selected", STYLE_COLORS["accent"])],
-        foreground=[("selected", STYLE_COLORS["fg_primary"])],
+        foreground=[("selected", "#ffffff")],
     )
 
 
@@ -282,16 +284,12 @@ class PositionSizeFrame(ttk.LabelFrame):
         self.height_entry = ttk.Entry(size_frame, textvariable=self.height_var, width=10)
         self.height_entry.grid(row=0, column=3, padx=(0, 15), sticky=tk.W)
 
-        # Кнопки предустановок
+        # Кнопки предустановок - только половина экрана
         preset_frame = ttk.Frame(self)
         preset_frame.pack(fill=tk.X, padx=10, pady=10)
 
         ttk.Button(preset_frame, text="½ экрана ←", command=self._set_half_left).pack(side=tk.LEFT, padx=3, pady=3)
         ttk.Button(preset_frame, text="½ экрана →", command=self._set_half_right).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↖", command=self._set_quarter_top_left).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↗", command=self._set_quarter_top_right).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↙", command=self._set_quarter_bottom_left).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↘", command=self._set_quarter_bottom_right).pack(side=tk.LEFT, padx=3, pady=3)
 
     def _get_screen_size(self) -> tuple[int, int]:
         root = tk.Tk()
@@ -392,33 +390,50 @@ class ScreenAreaSelector(tk.Toplevel):
         coord_frame = ttk.LabelFrame(main_frame, text="📐 Параметры области")
         coord_frame.pack(fill=tk.X, pady=10)
         
-        # X, Y
+        # X, Y с кнопками-стрелочками
         xy_frame = ttk.Frame(coord_frame)
         xy_frame.pack(fill=tk.X, padx=10, pady=5)
         
         ttk.Label(xy_frame, text="X:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
         self.x_var = tk.StringVar(value="0")
         self.x_entry = ttk.Entry(xy_frame, textvariable=self.x_var, width=10)
-        self.x_entry.grid(row=0, column=1, padx=(0, 20), sticky=tk.W)
+        self.x_entry.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
+        # Кнопки-стрелочки для X
+        ttk.Button(xy_frame, text="◀", command=self._decrement_x, width=3).grid(row=0, column=2, padx=2)
+        ttk.Button(xy_frame, text="▶", command=self._increment_x, width=3).grid(row=0, column=3, padx=(0, 20))
         
-        ttk.Label(xy_frame, text="Y:").grid(row=0, column=2, padx=(0, 5), sticky=tk.E)
+        ttk.Label(xy_frame, text="Y:").grid(row=0, column=4, padx=(0, 5), sticky=tk.E)
         self.y_var = tk.StringVar(value="0")
         self.y_entry = ttk.Entry(xy_frame, textvariable=self.y_var, width=10)
-        self.y_entry.grid(row=0, column=3, sticky=tk.W)
+        self.y_entry.grid(row=0, column=5, padx=(0, 5), sticky=tk.W)
+        # Кнопки-стрелочки для Y
+        ttk.Button(xy_frame, text="▲", command=self._increment_y, width=3).grid(row=0, column=6, padx=2)
+        ttk.Button(xy_frame, text="▼", command=self._decrement_y, width=3).grid(row=0, column=7)
         
-        # Width, Height
+        # Width, Height с кнопками-стрелочками
         wh_frame = ttk.Frame(coord_frame)
         wh_frame.pack(fill=tk.X, padx=10, pady=5)
         
         ttk.Label(wh_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
         self.width_var = tk.StringVar(value="800")
         self.width_entry = ttk.Entry(wh_frame, textvariable=self.width_var, width=10)
-        self.width_entry.grid(row=0, column=1, padx=(0, 20), sticky=tk.W)
+        self.width_entry.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
+        # Кнопки-стрелочки для ширины
+        ttk.Button(wh_frame, text="◀", command=self._decrement_width, width=3).grid(row=0, column=2, padx=2)
+        ttk.Button(wh_frame, text="▶", command=self._increment_width, width=3).grid(row=0, column=3, padx=(0, 20))
         
-        ttk.Label(wh_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5), sticky=tk.E)
+        ttk.Label(wh_frame, text="Высота:").grid(row=0, column=4, padx=(0, 5), sticky=tk.E)
         self.height_var = tk.StringVar(value="600")
         self.height_entry = ttk.Entry(wh_frame, textvariable=self.height_var, width=10)
-        self.height_entry.grid(row=0, column=3, sticky=tk.W)
+        self.height_entry.grid(row=0, column=5, padx=(0, 5), sticky=tk.W)
+        # Кнопки-стрелочки для высоты
+        ttk.Button(wh_frame, text="▲", command=self._increment_height, width=3).grid(row=0, column=6, padx=2)
+        ttk.Button(wh_frame, text="▼", command=self._decrement_height, width=3).grid(row=0, column=7)
+        
+        # Кнопка подсветки области
+        highlight_btn_frame = ttk.Frame(coord_frame)
+        highlight_btn_frame.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(highlight_btn_frame, text="👁️ Подсветить область на экране", command=self._highlight_area).pack(side=tk.LEFT)
         
         # Кнопки предустановок
         preset_frame = ttk.Frame(coord_frame)
@@ -556,6 +571,85 @@ class ScreenAreaSelector(tk.Toplevel):
         self.y_var.set("0")
         self.width_var.set(str(self.screen_width))
         self.height_var.set(str(self.screen_height))
+
+    def _increment_x(self) -> None:
+        try:
+            val = int(self.x_var.get())
+            self.x_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_x(self) -> None:
+        try:
+            val = int(self.x_var.get())
+            self.x_var.set(str(max(0, val - 10)))
+        except ValueError:
+            pass
+            
+    def _increment_y(self) -> None:
+        try:
+            val = int(self.y_var.get())
+            self.y_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_y(self) -> None:
+        try:
+            val = int(self.y_var.get())
+            self.y_var.set(str(max(0, val - 10)))
+        except ValueError:
+            pass
+            
+    def _increment_width(self) -> None:
+        try:
+            val = int(self.width_var.get())
+            self.width_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_width(self) -> None:
+        try:
+            val = int(self.width_var.get())
+            self.width_var.set(str(max(10, val - 10)))
+        except ValueError:
+            pass
+            
+    def _increment_height(self) -> None:
+        try:
+            val = int(self.height_var.get())
+            self.height_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_height(self) -> None:
+        try:
+            val = int(self.height_var.get())
+            self.height_var.set(str(max(10, val - 10)))
+        except ValueError:
+            pass
+            
+    def _highlight_area(self) -> None:
+        """Показывает реальную подсветку области на экране."""
+        try:
+            x = int(self.x_var.get())
+            y = int(self.y_var.get())
+            w = int(self.width_var.get())
+            h = int(self.height_var.get())
+            
+            # Создаем временное окно для подсветки
+            preview = tk.Toplevel(self)
+            preview.title("Подсветка области")
+            preview.geometry(f"{w}x{h}+{x}+{y}")
+            preview.attributes("-topmost", True)
+            preview.configure(bg="#667eea")
+            preview.overrideredirect(True)
+            preview.wm_attributes("-alpha", 0.3)
+            
+            # Закрываем через 2 секунды
+            preview.after(2000, preview.destroy)
+            
+        except ValueError as e:
+            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
         
     def _update_preview(self, *args) -> None:
         """Обновляет предпросмотр выделенной области на canvas."""
@@ -1630,36 +1724,51 @@ class NewScreenshotPresetDialog(tk.Toplevel):
         ttk.Entry(path_frame, textvariable=self.path_var, width=40).pack(side=tk.LEFT)
         ttk.Button(path_frame, text="...", command=self._browse_path).pack(side=tk.LEFT, padx=5)
         
-        # Область выделения
+        # Область выделения с кнопками-стрелочками и подсветкой
         area_frame = ttk.LabelFrame(main_frame, text="📐 Положение и размер области")
-        area_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=10, ipadx=10, ipady=10)
+        area_frame.grid(row=3, column=0, columnspan=2, sticky=tk.EW, pady=10, ipadx=10, ipady=10, padx=10)
         
-        # Координаты
+        # Координаты X, Y с кнопками-стрелочками
         coord_frame = ttk.Frame(area_frame)
         coord_frame.pack(fill=tk.X, padx=10, pady=5)
         
         ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5))
         self.x_var = tk.StringVar(value="0")
-        ttk.Entry(coord_frame, textvariable=self.x_var, width=10).grid(row=0, column=1, padx=(0, 20))
+        x_entry = ttk.Entry(coord_frame, textvariable=self.x_var, width=10)
+        x_entry.grid(row=0, column=1, padx=(0, 5))
+        ttk.Button(coord_frame, text="◀", command=self._decrement_x, width=3).grid(row=0, column=2, padx=2)
+        ttk.Button(coord_frame, text="▶", command=self._increment_x, width=3).grid(row=0, column=3, padx=(0, 20))
         
-        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5))
+        ttk.Label(coord_frame, text="Y:").grid(row=0, column=4, padx=(0, 5))
         self.y_var = tk.StringVar(value="0")
-        ttk.Entry(coord_frame, textvariable=self.y_var, width=10).grid(row=0, column=3)
+        y_entry = ttk.Entry(coord_frame, textvariable=self.y_var, width=10)
+        y_entry.grid(row=0, column=5, padx=(0, 5))
+        ttk.Button(coord_frame, text="▲", command=self._increment_y, width=3).grid(row=0, column=6, padx=2)
+        ttk.Button(coord_frame, text="▼", command=self._decrement_y, width=3).grid(row=0, column=7)
         
-        # Размеры
+        # Размеры Width, Height с кнопками-стрелочками
         size_frame = ttk.Frame(area_frame)
         size_frame.pack(fill=tk.X, padx=10, pady=5)
         
         ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5))
         self.width_var = tk.StringVar(value="800")
-        ttk.Entry(size_frame, textvariable=self.width_var, width=10).grid(row=0, column=1, padx=(0, 20))
+        w_entry = ttk.Entry(size_frame, textvariable=self.width_var, width=10)
+        w_entry.grid(row=0, column=1, padx=(0, 5))
+        ttk.Button(size_frame, text="◀", command=self._decrement_width, width=3).grid(row=0, column=2, padx=2)
+        ttk.Button(size_frame, text="▶", command=self._increment_width, width=3).grid(row=0, column=3, padx=(0, 20))
         
-        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5))
+        ttk.Label(size_frame, text="Высота:").grid(row=0, column=4, padx=(0, 5))
         self.height_var = tk.StringVar(value="600")
-        ttk.Entry(size_frame, textvariable=self.height_var, width=10).grid(row=0, column=3)
+        h_entry = ttk.Entry(size_frame, textvariable=self.height_var, width=10)
+        h_entry.grid(row=0, column=5, padx=(0, 5))
+        ttk.Button(size_frame, text="▲", command=self._increment_height, width=3).grid(row=0, column=6, padx=2)
+        ttk.Button(size_frame, text="▼", command=self._decrement_height, width=3).grid(row=0, column=7)
         
-        # Кнопка выбора области
-        ttk.Button(area_frame, text="🎯 Выделить область мышью", command=self._select_area).pack(pady=10)
+        # Кнопки действий
+        action_btn_frame = ttk.Frame(area_frame)
+        action_btn_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Button(action_btn_frame, text="👁️ Подсветить область", command=self._highlight_area).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_btn_frame, text="🎯 Выделить мышью", command=self._select_area).pack(side=tk.LEFT, padx=5)
         
         # Описание
         ttk.Label(main_frame, text="📝 Описание:").grid(row=4, column=0, sticky=tk.NW, pady=8)
@@ -1691,6 +1800,85 @@ class NewScreenshotPresetDialog(tk.Toplevel):
             self.height_var.set(str(h))
         
         dialog = ScreenAreaSelector(self, on_confirm)
+
+    def _increment_x(self) -> None:
+        try:
+            val = int(self.x_var.get())
+            self.x_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_x(self) -> None:
+        try:
+            val = int(self.x_var.get())
+            self.x_var.set(str(max(0, val - 10)))
+        except ValueError:
+            pass
+            
+    def _increment_y(self) -> None:
+        try:
+            val = int(self.y_var.get())
+            self.y_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_y(self) -> None:
+        try:
+            val = int(self.y_var.get())
+            self.y_var.set(str(max(0, val - 10)))
+        except ValueError:
+            pass
+            
+    def _increment_width(self) -> None:
+        try:
+            val = int(self.width_var.get())
+            self.width_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_width(self) -> None:
+        try:
+            val = int(self.width_var.get())
+            self.width_var.set(str(max(10, val - 10)))
+        except ValueError:
+            pass
+            
+    def _increment_height(self) -> None:
+        try:
+            val = int(self.height_var.get())
+            self.height_var.set(str(val + 10))
+        except ValueError:
+            pass
+            
+    def _decrement_height(self) -> None:
+        try:
+            val = int(self.height_var.get())
+            self.height_var.set(str(max(10, val - 10)))
+        except ValueError:
+            pass
+            
+    def _highlight_area(self) -> None:
+        """Показывает реальную подсветку области на экране."""
+        try:
+            x = int(self.x_var.get())
+            y = int(self.y_var.get())
+            w = int(self.width_var.get())
+            h = int(self.height_var.get())
+            
+            # Создаем временное окно для подсветки
+            preview = tk.Toplevel(self)
+            preview.title("Подсветка области")
+            preview.geometry(f"{w}x{h}+{x}+{y}")
+            preview.attributes("-topmost", True)
+            preview.configure(bg="#667eea")
+            preview.overrideredirect(True)
+            preview.wm_attributes("-alpha", 0.3)
+            
+            # Закрываем через 2 секунды
+            preview.after(2000, preview.destroy)
+            
+        except ValueError as e:
+            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
         
     def _save(self) -> None:
         """Сохраняет новый пресет."""
