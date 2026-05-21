@@ -512,10 +512,9 @@ class MainWindow(ctk.CTk):
                 fg_color="transparent",
                 hover_color=COLOR_SCHEME["bg_accent"],
                 anchor="w",
-                padx=20,
                 command=command
             )
-            btn.pack(fill="x", padx=10, pady=5)
+            btn.pack(fill="x", padx=20, pady=5)
         
         # Основная область контента
         self.content_frame = ctk.CTkFrame(self, fg_color=COLOR_SCHEME["bg_primary"], corner_radius=0)
