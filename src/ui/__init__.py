@@ -1,5 +1,9 @@
 """Модуль UI для приложения Automizer."""
 
-from src.ui.app import NormalizerApp, main
+from src.ui.app import MainWindow, run_app
 
-__all__ = ["NormalizerApp", "main"]
+# Алиасы для обратной совместимости
+NormalizerApp = MainWindow
+main = run_app
+
+__all__ = ["MainWindow", "run_app", "NormalizerApp", "main"]

@@ -1,1 +1,29 @@
-Nothing needs to be added to .gitignore since the only change is adding a Python source file (.py) which should not be ignored.
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Backup files
+*~
+*.bak
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Backup and temporary files
+*.tmp
+*.temp
+```

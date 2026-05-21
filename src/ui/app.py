@@ -1,22 +1,18 @@
 """
-UI модуль для управления нормализацией процессов и скриншотами.
+Современный UI модуль для управления нормализацией процессов и скриншотами.
+Использует CustomTkinter для современного дизайна с закругленными углами, градиентами и тенями.
 
-Предоставляет Tkinter интерфейс с вкладками:
-- Вкладка 1: Выбор процесса из списка с поиском и настройка позиции/размера
-- Вкладка 2: Применение пресетов и управление ими
-- Вкладка 3: Работа со скриншотами (выделение области, создание, привязка к пресету)
-
-Также поддерживает:
-- Сохранение текущих параметров как пресет
-- Редактирование и удаление пресетов
-- Создание скриншотов с выделением области
-- Привязка скриншотов к пресетам процессов
-- Стильный современный дизайн
+Архитектура:
+- Боковая навигация с иконками
+- Адаптивный layout с использованием grid
+- Модальные окна для редактирования координат
+- Предпросмотр области с полупрозрачной рамкой
 """
 
-import tkinter as tk
-from tkinter import ttk, messagebox, font
+import customtkinter as ctk
+from tkinter import messagebox
 from typing import Optional, Callable
+import threading
 
 from src.window_manager import WindowManager, WindowInfo
 from src.normalizer import ProcessNormalizer, NormalizationPreset
@@ -25,2283 +21,1031 @@ from src.screenshot import ScreenshotManager, ScreenshotInfo
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
-# Стили приложения - мягкие пастельные тона с градиентами и тенями
-STYLE_COLORS = {
-    "bg_primary": "#f0f4f8",      # Очень светлый серо-голубой фон
-    "bg_secondary": "#ffffff",    # Белый фон для панелей
-    "bg_accent": "#e2e8f0",       # Мягкий серо-голубой акцент
-    "bg_gradient_start": "#667eea",  # Начало градиента (мягкий синий)
-    "bg_gradient_end": "#764ba2",    # Конец градиента (мягкий фиолетовый)
-    "fg_primary": "#4a5568",      # Мягкий темно-серый текст
-    "fg_secondary": "#718096",    # Светло-серый текст
-    "accent": "#667eea",          # Мягкий синий
-    "accent_hover": "#5a67d8",    # Темнее при наведении
-    "accent_light": "#a3bffa",    # Светлая версия акцента
-    "success": "#68d391",         # Мягкий зеленый
-    "warning": "#f6ad55",         # Мягкий оранжевый
-    "danger": "#fc8181",          # Мягкий красный
-    "shadow": "rgba(0, 0, 0, 0.1)",  # Цвет тени
+# Цветовая схема - мягкие пастельные тона
+COLOR_SCHEME = {
+    "bg_primary": "#f8fafc",        # Очень светлый фон
+    "bg_secondary": "#ffffff",      # Белый для карточек
+    "bg_accent": "#e2e8f0",         # Мягкий акцент
+    "text_primary": "#2d3748",      # Темно-серый текст
+    "text_secondary": "#718096",    # Светло-серый текст
+    "accent": "#667eea",            # Мягкий синий
+    "accent_hover": "#5a67d8",      # Темнее при наведении
+    "success": "#48bb78",           # Зеленый
+    "warning": "#ed8936",           # Оранжевый
+    "danger": "#f56565",            # Красный
 }
 
+# Настройка темы CustomTkinter
+ctk.set_appearance_mode("light")
+ctk.set_default_color_theme("blue")
 
-def apply_modern_style(widget: tk.Widget) -> None:
-    """Применяет современный стиль к виджету с мягкими цветами, градиентами и тенями."""
-    style = ttk.Style()
+
+class OverlayPreview(ctk.CTkToplevel):
+    """Полупрозрачное окно для предпросмотра области."""
     
-    # Настройка темы
-    style.theme_use('clam')
-    
-    # TFrame - белый фон
-    style.configure(
-        "TFrame",
-        background=STYLE_COLORS["bg_secondary"]
-    )
-    
-    # TLabel - мягкий текст
-    style.configure(
-        "TLabel",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["fg_primary"],
-        font=("Segoe UI", 10)
-    )
-    
-    # TLabelFrame - мягкие цвета с закругленными углами
-    style.configure(
-        "TLabelframe",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["accent"],
-        bordercolor=STYLE_COLORS["bg_accent"],
-        lightcolor=STYLE_COLORS["bg_accent"],
-        darkcolor=STYLE_COLORS["bg_accent"],
-        relief="flat",
-    )
-    style.configure(
-        "TLabelframe.Label",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["accent"],
-        font=("Segoe UI", 11, "bold")
-    )
-    
-    # TButton - скругленные кнопки с градиентом и тенью при наведении
-    style.configure(
-        "TButton",
-        background=STYLE_COLORS["accent"],
-        foreground="#ffffff",
-        bordercolor=STYLE_COLORS["accent"],
-        focuscolor=STYLE_COLORS["accent_hover"],
-        padding=(24, 12),
-        font=("Segoe UI", 10, "bold"),
-        relief="flat",
-        borderwidth=0,
-    )
-    style.map(
-        "TButton",
-        background=[
-            ("active", STYLE_COLORS["accent_hover"]), 
-            ("pressed", STYLE_COLORS["accent_hover"]),
-            ("!active", STYLE_COLORS["accent"])
-        ],
-        foreground=[("active", "#ffffff"), ("pressed", "#ffffff")],
-    )
-    
-    # TEntry - мягкие поля ввода с закругленными краями
-    style.configure(
-        "TEntry",
-        fieldbackground="#f7fafc",
-        foreground=STYLE_COLORS["fg_primary"],
-        bordercolor=STYLE_COLORS["bg_accent"],
-        lightcolor=STYLE_COLORS["bg_accent"],
-        darkcolor=STYLE_COLORS["bg_accent"],
-        padding=12,
-        insertcolor=STYLE_COLORS["fg_primary"],
-        relief="flat",
-    )
-    
-    # Treeview - мягкие цвета
-    style.configure(
-        "Treeview",
-        background="#f7fafc",
-        foreground=STYLE_COLORS["fg_primary"],
-        fieldbackground="#f7fafc",
-        rowheight=32,
-        font=("Segoe UI", 10),
-        relief="flat",
-    )
-    style.configure(
-        "Treeview.Heading",
-        background=STYLE_COLORS["bg_accent"],
-        foreground=STYLE_COLORS["fg_primary"],
-        font=("Segoe UI", 10, "bold"),
-        padding=12,
-        relief="flat",
-    )
-    style.map(
-        "Treeview",
-        background=[("selected", STYLE_COLORS["accent"])],
-        foreground=[("selected", "#ffffff")],
-    )
-    
-    # Notebook (вкладки) - округлые с мягкими цветами
-    style.configure(
-        "TNotebook",
-        background=STYLE_COLORS["bg_secondary"],
-        borderwidth=0,
-    )
-    style.configure(
-        "TNotebook.Tab",
-        background=STYLE_COLORS["bg_accent"],
-        foreground=STYLE_COLORS["fg_secondary"],
-        padding=(30, 14),
-        font=("Segoe UI", 11, "bold"),
-        relief="flat",
-    )
-    style.map(
-        "TNotebook.Tab",
-        background=[("selected", STYLE_COLORS["accent"])],
-        foreground=[("selected", "#ffffff")],
-    )
-
-
-class ProcessSelectorFrame(ttk.LabelFrame):
-    """Фрейм для выбора процесса с поиском."""
-
-    def __init__(self, parent, on_select: Callable[[WindowInfo], None]):
-        super().__init__(parent, text="📋 Выберите процесс")
-        self.on_select = on_select
-        self._windows: list[WindowInfo] = []
-        self._selected_window: Optional[WindowInfo] = None
-
-        self._setup_ui()
-        self._refresh_windows()
-
-    def _setup_ui(self) -> None:
-        # Поисковая строка
-        search_frame = ttk.Frame(self)
-        search_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", self._on_search_changed)
-
-        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        self.search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.search_entry.insert(0, "🔍 Поиск по названию окна...")
-        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
-        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
-
-        refresh_btn = ttk.Button(search_frame, text="⟳ Обновить", command=self._refresh_windows)
-        refresh_btn.pack(side=tk.RIGHT, padx=(10, 0))
-
-        # Список окон
-        columns = ("title", "position", "size")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=10)
-
-        self.tree.heading("title", text="Заголовок окна")
-        self.tree.heading("position", text="Позиция")
-        self.tree.heading("size", text="Размер")
-
-        self.tree.column("title", width=350, minwidth=200)
-        self.tree.column("position", width=130, minwidth=100)
-        self.tree.column("size", width=110, minwidth=80)
-
-        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
-
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
-
-    def _on_search_focus_in(self, event):
-        if self.search_var.get().startswith("🔍"):
-            self.search_var.set("")
-
-    def _on_search_focus_out(self, event):
-        if not self.search_var.get():
-            self.search_var.set("🔍 Поиск по названию окна...")
-
-    def _on_search_changed(self, *args):
-        query = self.search_var.get()
-        if query.startswith("🔍"):
-            query = ""
-        self._filter_windows(query)
-
-    def _refresh_windows(self) -> None:
-        wm = WindowManager()
-        self._windows = wm.get_windows()
-        self._filter_windows(self.search_var.get() if not self.search_var.get().startswith("🔍") else "")
-
-    def _filter_windows(self, query: str) -> None:
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
-        search_term = query.lower()
-        filtered = [
-            w for w in self._windows
-            if not search_term or search_term in w.title.lower()
-        ]
-
-        for window in filtered:
-            self.tree.insert("", tk.END, iid=str(window.window_id), values=(
-                window.title[:50] + "..." if len(window.title) > 50 else window.title,
-                f"({window.x}, {window.y})",
-                f"{window.width}x{window.height}",
-            ))
-
-    def _on_select(self, event) -> None:
-        selection = self.tree.selection()
-        if selection:
-            window_id = int(selection[0])
-            for window in self._windows:
-                if window.window_id == window_id:
-                    self._selected_window = window
-                    self.on_select(window)
-                    break
-
-    def get_selected_window(self) -> Optional[WindowInfo]:
-        return self._selected_window
-
-
-class PositionSizeFrame(ttk.LabelFrame):
-    """Фрейм для указания положения и размеров."""
-
-    def __init__(self, parent):
-        super().__init__(parent, text="📐 Положение и размер")
-        self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        # Координаты
-        coord_frame = ttk.Frame(self)
-        coord_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
-        self.x_var = tk.StringVar(value="0")
-        self.x_entry = ttk.Entry(coord_frame, textvariable=self.x_var, width=10)
-        self.x_entry.grid(row=0, column=1, padx=(0, 15), sticky=tk.W)
-
-        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5), sticky=tk.E)
-        self.y_var = tk.StringVar(value="0")
-        self.y_entry = ttk.Entry(coord_frame, textvariable=self.y_var, width=10)
-        self.y_entry.grid(row=0, column=3, padx=(0, 15), sticky=tk.W)
-
-        # Размеры
-        size_frame = ttk.Frame(self)
-        size_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
-        self.width_var = tk.StringVar(value="800")
-        self.width_entry = ttk.Entry(size_frame, textvariable=self.width_var, width=10)
-        self.width_entry.grid(row=0, column=1, padx=(0, 15), sticky=tk.W)
-
-        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5), sticky=tk.E)
-        self.height_var = tk.StringVar(value="600")
-        self.height_entry = ttk.Entry(size_frame, textvariable=self.height_var, width=10)
-        self.height_entry.grid(row=0, column=3, padx=(0, 15), sticky=tk.W)
-
-        # Кнопки предустановок - только половина экрана
-        preset_frame = ttk.Frame(self)
-        preset_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Button(preset_frame, text="½ экрана ←", command=self._set_half_left).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="½ экрана →", command=self._set_half_right).pack(side=tk.LEFT, padx=3, pady=3)
-
-    def _get_screen_size(self) -> tuple[int, int]:
-        root = tk.Tk()
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        root.destroy()
-        return screen_width, screen_height
-
-    def _set_half_left(self) -> None:
-        screen_w, screen_h = self._get_screen_size()
-        self.x_var.set("0")
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h))
-
-    def _set_half_right(self) -> None:
-        screen_w, screen_h = self._get_screen_size()
-        self.x_var.set(str(screen_w // 2))
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h))
-
-    def _set_quarter_top_left(self) -> None:
-        screen_w, screen_h = self._get_screen_size()
-        self.x_var.set("0")
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-
-    def _set_quarter_top_right(self) -> None:
-        screen_w, screen_h = self._get_screen_size()
-        self.x_var.set(str(screen_w // 2))
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-
-    def _set_quarter_bottom_left(self) -> None:
-        screen_w, screen_h = self._get_screen_size()
-        self.x_var.set("0")
-        self.y_var.set(str(screen_h // 2))
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-
-    def _set_quarter_bottom_right(self) -> None:
-        screen_w, screen_h = self._get_screen_size()
-        self.x_var.set(str(screen_w // 2))
-        self.y_var.set(str(screen_h // 2))
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-
-    def get_values(self) -> tuple[int, int, int, int]:
-        return (
-            int(self.x_var.get()),
-            int(self.y_var.get()),
-            int(self.width_var.get()),
-            int(self.height_var.get()),
-        )
-
-    def set_from_window(self, window: WindowInfo) -> None:
-        self.x_var.set(str(window.x))
-        self.y_var.set(str(window.y))
-        self.width_var.set(str(window.width))
-        self.height_var.set(str(window.height))
-
-
-class ScreenAreaSelector(tk.Toplevel):
-    """Диалог для выделения области экрана с предпросмотром."""
-
-    def __init__(self, parent, on_confirm: Callable[[tuple[int, int, int, int]], None]):
+    def __init__(self, parent, x: int, y: int, width: int, height: int):
         super().__init__(parent)
+        
+        self.overrideredirect(True)  # Убрать рамки окна
+        self.attributes("-topmost", True)
+        self.attributes("-alpha", 0.3)  # Полупрозрачность
+        
+        # Позиционирование
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Фон с цветной рамкой
+        self.configure(fg_color=(COLOR_SCHEME["accent"], COLOR_SCHEME["accent_hover"]))
+        
+        # Рамка внутри для видимости
+        border_frame = ctk.CTkFrame(self, fg_color="transparent", border_width=3, border_color="#ffffff")
+        border_frame.pack(fill="both", expand=True)
+
+
+class CoordinateEditorDialog(ctk.CTkToplevel):
+    """Модальное окно для редактирования координат с предпросмотром."""
+    
+    def __init__(self, parent, title: str, x: int = 0, y: int = 0, width: int = 800, height: int = 600,
+                 on_confirm: Callable[[int, int, int, int], None] = None):
+        super().__init__(parent)
+        
+        self.title(title)
+        self.geometry("500x550")
+        self.resizable(False, False)
+        
+        self.transient(parent)
+        self.grab_set()
+        
+        self.x_var = ctk.StringVar(value=str(x))
+        self.y_var = ctk.StringVar(value=str(y))
+        self.width_var = ctk.StringVar(value=str(width))
+        self.height_var = ctk.StringVar(value=str(height))
+        self.step_var = ctk.StringVar(value="10")  # Изменяемый шаг
+        
         self.on_confirm = on_confirm
-        self.result: Optional[tuple[int, int, int, int]] = None
-        
-        self.title("📸 Выделение области экрана")
-        self.geometry("900x650")
-        
-        self.transient(parent)
-        self.grab_set()
-        
-        # Получаем размеры экрана
-        self.screen_width = self.winfo_screenwidth()
-        self.screen_height = self.winfo_screenheight()
+        self.preview_window: Optional[OverlayPreview] = None
         
         self._setup_ui()
+    
+    def _setup_ui(self):
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
-    def _setup_ui(self) -> None:
-        main_frame = ttk.Frame(self, padding=15)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Инструкция
-        ttk.Label(
+        # Заголовок
+        title_label = ctk.CTkLabel(
             main_frame, 
-            text="Выделите область экрана для скриншота:",
-            font=("Segoe UI", 12, "bold")
-        ).pack(pady=(0, 10))
+            text="📐 Редактор координат",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=COLOR_SCHEME["text_primary"]
+        )
+        title_label.pack(pady=(0, 20))
         
-        # Поля для координат и размеров
-        coord_frame = ttk.LabelFrame(main_frame, text="📐 Параметры области")
-        coord_frame.pack(fill=tk.X, pady=10)
+        # Поле шага
+        step_frame = ctk.CTkFrame(main_frame, fg_color=COLOR_SCHEME["bg_secondary"])
+        step_frame.pack(fill="x", pady=10)
+        ctk.CTkLabel(step_frame, text="Шаг (px):", font=ctk.CTkFont(size=14)).pack(side="left", padx=10)
+        self.step_entry = ctk.CTkEntry(step_frame, textvariable=self.step_var, width=80)
+        self.step_entry.pack(side="left", padx=10)
         
-        # X, Y с кнопками-стрелочками
-        xy_frame = ttk.Frame(coord_frame)
-        xy_frame.pack(fill=tk.X, padx=10, pady=5)
+        # Координаты X, Y
+        coord_frame = ctk.CTkFrame(main_frame, fg_color=COLOR_SCHEME["bg_secondary"])
+        coord_frame.pack(fill="x", pady=10)
         
-        ttk.Label(xy_frame, text="X:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
-        self.x_var = tk.StringVar(value="0")
-        self.x_entry = ttk.Entry(xy_frame, textvariable=self.x_var, width=10)
-        self.x_entry.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
-        # Кнопки-стрелочки для X
-        ttk.Button(xy_frame, text="◀", command=self._decrement_x, width=3).grid(row=0, column=2, padx=2)
-        ttk.Button(xy_frame, text="▶", command=self._increment_x, width=3).grid(row=0, column=3, padx=(0, 20))
+        # X
+        x_row = ctk.CTkFrame(coord_frame, fg_color="transparent")
+        x_row.pack(fill="x", padx=15, pady=8)
+        ctk.CTkLabel(x_row, text="X:", width=30, font=ctk.CTkFont(size=14)).pack(side="left")
         
-        ttk.Label(xy_frame, text="Y:").grid(row=0, column=4, padx=(0, 5), sticky=tk.E)
-        self.y_var = tk.StringVar(value="0")
-        self.y_entry = ttk.Entry(xy_frame, textvariable=self.y_var, width=10)
-        self.y_entry.grid(row=0, column=5, padx=(0, 5), sticky=tk.W)
-        # Кнопки-стрелочки для Y
-        ttk.Button(xy_frame, text="▲", command=self._increment_y, width=3).grid(row=0, column=6, padx=2)
-        ttk.Button(xy_frame, text="▼", command=self._decrement_y, width=3).grid(row=0, column=7)
+        btn_decrement_x = ctk.CTkButton(x_row, text="◀", width=40, command=self._decrement_x)
+        btn_decrement_x.pack(side="left", padx=5)
         
-        # Width, Height с кнопками-стрелочками
-        wh_frame = ttk.Frame(coord_frame)
-        wh_frame.pack(fill=tk.X, padx=10, pady=5)
+        self.x_entry = ctk.CTkEntry(x_row, textvariable=self.x_var, width=80)
+        self.x_entry.pack(side="left", padx=5)
         
-        ttk.Label(wh_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
-        self.width_var = tk.StringVar(value="800")
-        self.width_entry = ttk.Entry(wh_frame, textvariable=self.width_var, width=10)
-        self.width_entry.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
-        # Кнопки-стрелочки для ширины
-        ttk.Button(wh_frame, text="◀", command=self._decrement_width, width=3).grid(row=0, column=2, padx=2)
-        ttk.Button(wh_frame, text="▶", command=self._increment_width, width=3).grid(row=0, column=3, padx=(0, 20))
+        btn_increment_x = ctk.CTkButton(x_row, text="▶", width=40, command=self._increment_x)
+        btn_increment_x.pack(side="left", padx=5)
         
-        ttk.Label(wh_frame, text="Высота:").grid(row=0, column=4, padx=(0, 5), sticky=tk.E)
-        self.height_var = tk.StringVar(value="600")
-        self.height_entry = ttk.Entry(wh_frame, textvariable=self.height_var, width=10)
-        self.height_entry.grid(row=0, column=5, padx=(0, 5), sticky=tk.W)
-        # Кнопки-стрелочки для высоты
-        ttk.Button(wh_frame, text="▲", command=self._increment_height, width=3).grid(row=0, column=6, padx=2)
-        ttk.Button(wh_frame, text="▼", command=self._decrement_height, width=3).grid(row=0, column=7)
+        # Y
+        y_row = ctk.CTkFrame(coord_frame, fg_color="transparent")
+        y_row.pack(fill="x", padx=15, pady=8)
+        ctk.CTkLabel(y_row, text="Y:", width=30, font=ctk.CTkFont(size=14)).pack(side="left")
         
-        # Кнопка подсветки области
-        highlight_btn_frame = ttk.Frame(coord_frame)
-        highlight_btn_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Button(highlight_btn_frame, text="👁️ Подсветить область на экране", command=self._highlight_area).pack(side=tk.LEFT)
+        btn_decrement_y = ctk.CTkButton(y_row, text="▲", width=40, command=self._increment_y)
+        btn_decrement_y.pack(side="left", padx=5)
         
-        # Кнопки предустановок
-        preset_frame = ttk.Frame(coord_frame)
-        preset_frame.pack(fill=tk.X, padx=10, pady=10)
+        self.y_entry = ctk.CTkEntry(y_row, textvariable=self.y_var, width=80)
+        self.y_entry.pack(side="left", padx=5)
         
-        ttk.Button(preset_frame, text="½ экрана ←", command=self._set_half_left).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="½ экрана →", command=self._set_half_right).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↖", command=self._set_quarter_top_left).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↗", command=self._set_quarter_top_right).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↙", command=self._set_quarter_bottom_left).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="¼ ↘", command=self._set_quarter_bottom_right).pack(side=tk.LEFT, padx=3, pady=3)
-        ttk.Button(preset_frame, text="Полный экран", command=self._set_fullscreen).pack(side=tk.LEFT, padx=3, pady=3)
+        btn_increment_y = ctk.CTkButton(y_row, text="▼", width=40, command=self._decrement_y)
+        btn_increment_y.pack(side="left", padx=5)
         
-        # Canvas для предпросмотра (схематичное изображение экрана)
-        preview_frame = ttk.LabelFrame(main_frame, text="👁️ Схема области")
-        preview_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        # Размеры Width, Height
+        size_frame = ctk.CTkFrame(main_frame, fg_color=COLOR_SCHEME["bg_secondary"])
+        size_frame.pack(fill="x", pady=10)
         
-        self.canvas = tk.Canvas(preview_frame, bg="#1a1c29", highlightthickness=0)
-        self.canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Width
+        w_row = ctk.CTkFrame(size_frame, fg_color="transparent")
+        w_row.pack(fill="x", padx=15, pady=8)
+        ctk.CTkLabel(w_row, text="W:", width=30, font=ctk.CTkFont(size=14)).pack(side="left")
         
-        # Привязка событий к canvas
-        self.canvas.bind("<Configure>", self._on_canvas_resize)
-        self.canvas.bind("<ButtonPress-1>", self._on_mouse_press)
-        self.canvas.bind("<B1-Motion>", self._on_mouse_drag)
-        self.canvas.bind("<ButtonRelease-1>", self._on_mouse_release)
+        btn_decrement_w = ctk.CTkButton(w_row, text="◀", width=40, command=self._decrement_width)
+        btn_decrement_w.pack(side="left", padx=5)
         
-        # Переменные для рисования
-        self._rect_id = None
-        self._start_x = 0
-        self._start_y = 0
-        self._scale_x = 1.0
-        self._scale_y = 1.0
+        self.width_entry = ctk.CTkEntry(w_row, textvariable=self.width_var, width=80)
+        self.width_entry.pack(side="left", padx=5)
+        
+        btn_increment_w = ctk.CTkButton(w_row, text="▶", width=40, command=self._increment_width)
+        btn_increment_w.pack(side="left", padx=5)
+        
+        # Height
+        h_row = ctk.CTkFrame(size_frame, fg_color="transparent")
+        h_row.pack(fill="x", padx=15, pady=8)
+        ctk.CTkLabel(h_row, text="H:", width=30, font=ctk.CTkFont(size=14)).pack(side="left")
+        
+        btn_decrement_h = ctk.CTkButton(h_row, text="▲", width=40, command=self._increment_height)
+        btn_decrement_h.pack(side="left", padx=5)
+        
+        self.height_entry = ctk.CTkEntry(h_row, textvariable=self.height_var, width=80)
+        self.height_entry.pack(side="left", padx=5)
+        
+        btn_increment_h = ctk.CTkButton(h_row, text="▼", width=40, command=self._decrement_height)
+        btn_increment_h.pack(side="left", padx=5)
         
         # Кнопки действий
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.pack(fill=tk.X, pady=10)
+        button_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        button_frame.pack(fill="x", pady=20)
         
-        ttk.Button(btn_frame, text="✅ Подтвердить область", command=self._confirm).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="🔍 Показать превью на экране", command=self._show_real_preview).pack(side=tk.RIGHT, padx=10)
-        
-        # Обновляем предпросмотр при изменении значений
-        self.x_var.trace_add("write", self._update_preview)
-        self.y_var.trace_add("write", self._update_preview)
-        self.width_var.trace_add("write", self._update_preview)
-        self.height_var.trace_add("write", self._update_preview)
-        
-    def _get_scaled_coords(self, x: int, y: int, w: int, h: int) -> tuple[float, float, float, float]:
-        """Преобразует реальные координаты в координаты canvas с учетом масштаба."""
-        return (
-            x * self._scale_x,
-            y * self._scale_y,
-            (x + w) * self._scale_x,
-            (y + h) * self._scale_y
+        preview_btn = ctk.CTkButton(
+            button_frame,
+            text="👁️ Предпросмотр",
+            command=self._show_preview,
+            fg_color=COLOR_SCHEME["warning"],
+            hover_color="#dd6b20"
         )
+        preview_btn.pack(side="left", padx=5, expand=True, fill="x")
         
-    def _on_canvas_resize(self, event) -> None:
-        """Обновляет масштаб при изменении размера canvas."""
-        if self.screen_width > 0 and event.width > 0:
-            self._scale_x = event.width / self.screen_width
-        if self.screen_height > 0 and event.height > 0:
-            self._scale_y = event.height / self.screen_height
-        self._update_preview()
+        confirm_btn = ctk.CTkButton(
+            button_frame,
+            text="✓ Применить",
+            command=self._confirm,
+            fg_color=COLOR_SCHEME["success"],
+            hover_color="#38a169"
+        )
+        confirm_btn.pack(side="left", padx=5, expand=True, fill="x")
         
-    def _on_mouse_press(self, event) -> None:
-        """Начало выделения области."""
-        self._start_x = event.x
-        self._start_y = event.y
-        
-    def _on_mouse_drag(self, event) -> None:
-        """Перетаскивание для выделения области."""
-        if self._rect_id:
-            self.canvas.delete(self._rect_id)
-        
-        # Преобразуем координаты canvas в реальные координаты экрана
-        x1 = min(self._start_x, event.x) / self._scale_x
-        y1 = min(self._start_y, event.y) / self._scale_y
-        x2 = max(self._start_x, event.x) / self._scale_x
-        y2 = max(self._start_y, event.y) / self._scale_y
-        
-        # Обновляем поля ввода
-        self.x_var.set(str(int(x1)))
-        self.y_var.set(str(int(y1)))
-        self.width_var.set(str(int(x2 - x1)))
-        self.height_var.set(str(int(y2 - y1)))
-        
-    def _on_mouse_release(self, event) -> None:
-        """Завершение выделения области."""
-        pass
-        
-    def _set_half_left(self) -> None:
-        screen_w, screen_h = self.screen_width, self.screen_height
-        self.x_var.set("0")
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h))
-        
-    def _set_half_right(self) -> None:
-        screen_w, screen_h = self.screen_width, self.screen_height
-        self.x_var.set(str(screen_w // 2))
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h))
-        
-    def _set_quarter_top_left(self) -> None:
-        screen_w, screen_h = self.screen_width, self.screen_height
-        self.x_var.set("0")
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-        
-    def _set_quarter_top_right(self) -> None:
-        screen_w, screen_h = self.screen_width, self.screen_height
-        self.x_var.set(str(screen_w // 2))
-        self.y_var.set("0")
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-        
-    def _set_quarter_bottom_left(self) -> None:
-        screen_w, screen_h = self.screen_width, self.screen_height
-        self.x_var.set("0")
-        self.y_var.set(str(screen_h // 2))
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-        
-    def _set_quarter_bottom_right(self) -> None:
-        screen_w, screen_h = self.screen_width, self.screen_height
-        self.x_var.set(str(screen_w // 2))
-        self.y_var.set(str(screen_h // 2))
-        self.width_var.set(str(screen_w // 2))
-        self.height_var.set(str(screen_h // 2))
-        
-    def _set_fullscreen(self) -> None:
-        self.x_var.set("0")
-        self.y_var.set("0")
-        self.width_var.set(str(self.screen_width))
-        self.height_var.set(str(self.screen_height))
-
-    def _increment_x(self) -> None:
+        cancel_btn = ctk.CTkButton(
+            button_frame,
+            text="✕ Отмена",
+            command=self.destroy,
+            fg_color=COLOR_SCHEME["danger"],
+            hover_color="#e53e3e"
+        )
+        cancel_btn.pack(side="left", padx=5, expand=True, fill="x")
+    
+    def _get_step(self) -> int:
         try:
-            val = int(self.x_var.get())
-            self.x_var.set(str(val + 10))
+            return int(self.step_var.get())
+        except ValueError:
+            return 10
+    
+    def _decrement_x(self):
+        try:
+            val = int(self.x_var.get()) - self._get_step()
+            self.x_var.set(str(max(0, val)))
         except ValueError:
             pass
-            
-    def _decrement_x(self) -> None:
+    
+    def _increment_x(self):
         try:
-            val = int(self.x_var.get())
-            self.x_var.set(str(max(0, val - 10)))
+            val = int(self.x_var.get()) + self._get_step()
+            self.x_var.set(str(val))
         except ValueError:
             pass
-            
-    def _increment_y(self) -> None:
+    
+    def _increment_y(self):
         try:
-            val = int(self.y_var.get())
-            self.y_var.set(str(val + 10))
+            val = int(self.y_var.get()) - self._get_step()
+            self.y_var.set(str(max(0, val)))
         except ValueError:
             pass
-            
-    def _decrement_y(self) -> None:
+    
+    def _decrement_y(self):
         try:
-            val = int(self.y_var.get())
-            self.y_var.set(str(max(0, val - 10)))
+            val = int(self.y_var.get()) + self._get_step()
+            self.y_var.set(str(val))
         except ValueError:
             pass
-            
-    def _increment_width(self) -> None:
+    
+    def _decrement_width(self):
         try:
-            val = int(self.width_var.get())
-            self.width_var.set(str(val + 10))
+            val = int(self.width_var.get()) - self._get_step()
+            self.width_var.set(str(max(100, val)))
         except ValueError:
             pass
-            
-    def _decrement_width(self) -> None:
+    
+    def _increment_width(self):
         try:
-            val = int(self.width_var.get())
-            self.width_var.set(str(max(10, val - 10)))
+            val = int(self.width_var.get()) + self._get_step()
+            self.width_var.set(str(val))
         except ValueError:
             pass
-            
-    def _increment_height(self) -> None:
+    
+    def _increment_height(self):
         try:
-            val = int(self.height_var.get())
-            self.height_var.set(str(val + 10))
+            val = int(self.height_var.get()) - self._get_step()
+            self.height_var.set(str(max(100, val)))
         except ValueError:
             pass
-            
-    def _decrement_height(self) -> None:
+    
+    def _decrement_height(self):
         try:
-            val = int(self.height_var.get())
-            self.height_var.set(str(max(10, val - 10)))
+            val = int(self.height_var.get()) + self._get_step()
+            self.height_var.set(str(val))
         except ValueError:
             pass
-            
-    def _highlight_area(self) -> None:
-        """Показывает реальную подсветку области на экране."""
+    
+    def _show_preview(self):
+        if self.preview_window and self.preview_window.winfo_exists():
+            self.preview_window.destroy()
+        
         try:
             x = int(self.x_var.get())
             y = int(self.y_var.get())
             w = int(self.width_var.get())
             h = int(self.height_var.get())
             
-            # Создаем временное окно для подсветки
-            preview = tk.Toplevel(self)
-            preview.title("Подсветка области")
-            preview.geometry(f"{w}x{h}+{x}+{y}")
-            preview.attributes("-topmost", True)
-            preview.configure(bg="#667eea")
-            preview.overrideredirect(True)
-            preview.wm_attributes("-alpha", 0.3)
+            self.preview_window = OverlayPreview(self, x, y, w, h)
             
-            # Закрываем через 2 секунды
-            preview.after(2000, preview.destroy)
-            
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
-        
-    def _update_preview(self, *args) -> None:
-        """Обновляет предпросмотр выделенной области на canvas."""
-        try:
-            x = int(self.x_var.get())
-            y = int(self.y_var.get())
-            w = int(self.width_var.get())
-            h = int(self.height_var.get())
-            
-            # Ограничиваем значения размерами экрана
-            x = max(0, min(x, self.screen_width - 1))
-            y = max(0, min(y, self.screen_height - 1))
-            w = max(1, min(w, self.screen_width - x))
-            h = max(1, min(h, self.screen_height - y))
-            
-            # Очищаем canvas
-            self.canvas.delete("all")
-            
-            # Рисуем сетку (схематичное изображение экрана)
-            grid_color = "#3d405b"
-            for i in range(0, int(self.canvas.winfo_width()), 50):
-                self.canvas.create_line(i, 0, i, self.canvas.winfo_height(), fill=grid_color, dash=(2, 2))
-            for i in range(0, int(self.canvas.winfo_height()), 50):
-                self.canvas.create_line(0, i, self.canvas.winfo_width(), i, fill=grid_color, dash=(2, 2))
-            
-            # Рисуем выделенную область
-            x1, y1, x2, y2 = self._get_scaled_coords(x, y, w, h)
-            self._rect_id = self.canvas.create_rectangle(
-                x1, y1, x2, y2,
-                outline="#00adb5",
-                width=2,
-                fill="#00adb5",
-                stipple="gray50"
-            )
-            
-            # Добавляем метку с размерами
-            label_x = (x1 + x2) / 2
-            label_y = (y1 + y2) / 2
-            self.canvas.create_text(
-                label_x, label_y,
-                text=f"{w}x{h}",
-                fill="#edf2f4",
-                font=("Segoe UI", 12, "bold")
-            )
-            
+            # Автозакрытие через 3 секунды
+            self.after(3000, self._close_preview)
         except ValueError:
-            pass
-            
-    def _show_real_preview(self) -> None:
-        """Показывает реальное превью области на экране (красная рамка)."""
+            messagebox.showerror("Ошибка", "Некорректные значения координат")
+    
+    def _close_preview(self):
+        if self.preview_window and self.preview_window.winfo_exists():
+            self.preview_window.destroy()
+    
+    def _confirm(self):
         try:
             x = int(self.x_var.get())
             y = int(self.y_var.get())
             w = int(self.width_var.get())
             h = int(self.height_var.get())
             
-            # Создаем временное окно для превью
-            preview = tk.Toplevel(self)
-            preview.title("Предпросмотр")
-            preview.geometry(f"{w}x{h}+{x}+{y}")
-            preview.attributes("-topmost", True)
-            preview.configure(bg="red")
-            preview.overrideredirect(True)
-            preview.wm_attributes("-alpha", 0.3)
+            if self.on_confirm:
+                self.on_confirm(x, y, w, h)
             
-            # Закрываем через 1 секунду
-            preview.after(1000, preview.destroy)
-            
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
-            
-    def _confirm(self) -> None:
-        """Подтверждает выбранную область."""
-        try:
-            x = int(self.x_var.get())
-            y = int(self.y_var.get())
-            w = int(self.width_var.get())
-            h = int(self.height_var.get())
-            
-            if w <= 0 or h <= 0:
-                messagebox.showwarning("Предупреждение", "Размеры области должны быть положительными")
-                return
-                
-            self.result = (x, y, w, h)
-            self.on_confirm(self.result)
             self.destroy()
-            
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
-            
-    def _cancel(self) -> None:
-        """Отменяет выбор области."""
-        self.destroy()
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректные значения координат")
+    
+    def destroy(self):
+        if self.preview_window and self.preview_window.winfo_exists():
+            self.preview_window.destroy()
+        super().destroy()
 
 
-class ScreenshotManagerFrame(ttk.LabelFrame):
-    """Фрейм для управления скриншотами."""
-
-    def __init__(self, parent, screenshot_manager: ScreenshotManager, storage: PresetStorage):
-        super().__init__(parent, text="📸 Скриншоты")
-        self.screenshot_manager = screenshot_manager
-        self.storage = storage
-        self._setup_ui()
-        self._refresh_screenshots()
-
-    def _setup_ui(self) -> None:
-        # Поиск скриншотов
-        search_frame = ttk.Frame(self)
-        search_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", self._on_search_changed)
-        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        self.search_entry.pack(fill=tk.X)
-        self.search_entry.insert(0, "🔍 Поиск скриншотов...")
-        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
-        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
-
-        # Список скриншотов
-        columns = ("name", "preset", "size", "created")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=8)
-
-        self.tree.heading("name", text="Название")
-        self.tree.heading("preset", text="Пресет")
-        self.tree.heading("size", text="Размер")
-        self.tree.heading("created", text="Создан")
-
-        self.tree.column("name", width=200, minwidth=100)
-        self.tree.column("preset", width=150, minwidth=80)
-        self.tree.column("size", width=100, minwidth=60)
-        self.tree.column("created", width=150, minwidth=100)
-
-        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
-
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
-        self.tree.bind("<Double-1>", self._on_double_click)
-
-        # Кнопки управления
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Button(btn_frame, text="📸 Новый скриншот", command=self._create_screenshot).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="✏️ Редактировать", command=self._edit_screenshot).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="🗑️ Удалить", command=self._delete_screenshot).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="📂 Открыть папку", command=self._open_folder).pack(side=tk.RIGHT, padx=5)
-
-        self._selected_screenshot: Optional[ScreenshotInfo] = None
-
-    def _on_search_focus_in(self, event):
-        if self.search_var.get().startswith("🔍"):
-            self.search_var.set("")
-
-    def _on_search_focus_out(self, event):
-        if not self.search_var.get():
-            self.search_var.set("🔍 Поиск скриншотов...")
-
-    def _on_search_changed(self, *args):
-        query = self.search_var.get()
-        if query.startswith("🔍"):
-            query = ""
-        self._filter_screenshots(query)
-
-    def _refresh_screenshots(self) -> None:
-        self._filter_screenshots(self.search_var.get() if not self.search_var.get().startswith("🔍") else "")
-
-    def _filter_screenshots(self, query: str) -> None:
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
-        screenshots = self.screenshot_manager.search_screenshots(query)
-        for screenshot in screenshots:
-            # Получаем связанный пресет (если есть)
-            preset_name = self._get_preset_name_for_screenshot(screenshot.id)
-            
-            self.tree.insert("", tk.END, iid=screenshot.id, values=(
-                screenshot.description or screenshot.id,
-                preset_name or "-",
-                f"{screenshot.width}x{screenshot.height}",
-                screenshot.created_at.strftime("%d.%m.%Y %H:%M"),
-            ))
-
-    def _get_preset_name_for_screenshot(self, screenshot_id: str) -> Optional[str]:
-        """Получает имя пресета, связанного со скриншотом."""
-        # В будущем можно хранить связь в отдельном файле метаданных
-        # Пока возвращаем None
-        return None
-
-    def _on_select(self, event) -> None:
-        selection = self.tree.selection()
-        if selection:
-            screenshot_id = selection[0]
-            self._selected_screenshot = self.screenshot_manager.get_screenshot(screenshot_id)
-
-    def _on_double_click(self, event) -> None:
-        self._view_screenshot()
-
-    def _create_screenshot(self) -> None:
-        """Открывает диалог для создания нового скриншота."""
-        dialog = NewScreenshotDialog(self, self.screenshot_manager, self.storage)
-        if dialog.result:
-            self._refresh_screenshots()
-
-    def _edit_screenshot(self) -> None:
-        if self._selected_screenshot is None:
-            messagebox.showwarning("Предупреждение", "Выберите скриншот для редактирования")
-            return
-
-        dialog = EditScreenshotDialog(self, self._selected_screenshot, self.storage)
-        if dialog.result:
-            # Обновляем описание в менеджере скриншотов
-            # В будущем можно добавить полноценное редактирование метаданных
-            self._refresh_screenshots()
-
-    def _delete_screenshot(self) -> None:
-        if self._selected_screenshot is None:
-            messagebox.showwarning("Предупреждение", "Выберите скриншот для удаления")
-            return
-
-        if messagebox.askyesno("Подтверждение", f"Удалить скриншот '{self._selected_screenshot.description or self._selected_screenshot.id}'?"):
-            self.screenshot_manager.remove_screenshot(self._selected_screenshot.id)
-            self._selected_screenshot = None
-            self._refresh_screenshots()
-
-    def _view_screenshot(self) -> None:
-        """Открывает скриншот в просмотрщике."""
-        if self._selected_screenshot is None:
-            return
-            
-        try:
-            import os
-            os.startfile(self._selected_screenshot.path)
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось открыть скриншот: {e}")
-
-    def _open_folder(self) -> None:
-        """Открывает папку со скриншотами."""
-        try:
-            import os
-            os.startfile(self.screenshot_manager.storage_path)
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось открыть папку: {e}")
-
-
-class NewScreenshotDialog(tk.Toplevel):
-    """Диалог создания нового скриншота."""
-
-    def __init__(self, parent, screenshot_manager: ScreenshotManager, storage: PresetStorage):
-        super().__init__(parent)
-        self.result: bool = False
-        self.screenshot_manager = screenshot_manager
-        self.storage = storage
+class ProcessCard(ctk.CTkFrame):
+    """Карточка процесса в списке."""
+    
+    def __init__(self, parent, window_info: WindowInfo, on_select: Callable[[WindowInfo], None]):
+        super().__init__(parent, fg_color=COLOR_SCHEME["bg_secondary"], corner_radius=15)
         
-        self.title("📸 Новый скриншот")
-        self.geometry("500x450")
-        self.resizable(False, False)
-        
-        self.transient(parent)
-        self.grab_set()
+        self.window_info = window_info
+        self.on_select = on_select
         
         self._setup_ui()
+    
+    def _setup_ui(self):
+        self.configure(border_width=1, border_color=COLOR_SCHEME["bg_accent"])
         
-        self.wait_window()
-
-    def _setup_ui(self) -> None:
-        main_frame = ttk.Frame(self, padding=15)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        main_layout = ctk.CTkFrame(self, fg_color="transparent")
+        main_layout.pack(fill="both", expand=True, padx=15, pady=12)
         
-        # Название скриншота
-        ttk.Label(main_frame, text="📛 Название:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        self.name_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.name_var, width=40).grid(row=0, column=1, pady=8)
+        # Иконка и название
+        info_frame = ctk.CTkFrame(main_layout, fg_color="transparent")
+        info_frame.pack(side="left", fill="both", expand=True)
         
-        # Выбор пресета (опционально)
-        ttk.Label(main_frame, text="🔗 Привязать к пресету:").grid(row=1, column=0, sticky=tk.W, pady=8)
-        self.preset_var = tk.StringVar()
-        preset_combo = ttk.Combobox(main_frame, textvariable=self.preset_var, width=37, state="readonly")
-        preset_combo.grid(row=1, column=1, pady=8)
+        icon_label = ctk.CTkLabel(
+            info_frame, 
+            text="🖥️",
+            font=ctk.CTkFont(size=24)
+        )
+        icon_label.pack(side="left", padx=(0, 12))
         
-        # Заполняем комбобокс доступными пресетами
-        presets = self.storage.get_all_presets()
-        preset_values = [""] + [p.name for p in presets]
-        preset_combo["values"] = preset_values
+        text_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
+        text_frame.pack(side="left", fill="both", expand=True)
         
-        # Область выделения
-        area_frame = ttk.LabelFrame(main_frame, text="📐 Область выделения")
-        area_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=10, ipadx=10, ipady=10)
+        title_label = ctk.CTkLabel(
+            text_frame,
+            text=self.window_info.title[:50] + ("..." if len(self.window_info.title) > 50 else ""),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            anchor="w"
+        )
+        title_label.pack(fill="x")
         
-        # Координаты
-        coord_frame = ttk.Frame(area_frame)
-        coord_frame.pack(fill=tk.X, padx=10, pady=5)
+        details_label = ctk.CTkLabel(
+            text_frame,
+            text=f"PID: {self.window_info.window_id} | {self.window_info.width}x{self.window.height} @ ({self.window_info.x}, {self.window_info.y})",
+            font=ctk.CTkFont(size=11),
+            text_color=COLOR_SCHEME["text_secondary"],
+            anchor="w"
+        )
+        details_label.pack(fill="x", pady=(4, 0))
         
-        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5))
-        self.x_var = tk.StringVar(value="0")
-        ttk.Entry(coord_frame, textvariable=self.x_var, width=10).grid(row=0, column=1, padx=(0, 20))
-        
-        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5))
-        self.y_var = tk.StringVar(value="0")
-        ttk.Entry(coord_frame, textvariable=self.y_var, width=10).grid(row=0, column=3)
-        
-        # Размеры
-        size_frame = ttk.Frame(area_frame)
-        size_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5))
-        self.width_var = tk.StringVar(value="800")
-        ttk.Entry(size_frame, textvariable=self.width_var, width=10).grid(row=0, column=1, padx=(0, 20))
-        
-        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5))
-        self.height_var = tk.StringVar(value="600")
-        ttk.Entry(size_frame, textvariable=self.height_var, width=10).grid(row=0, column=3)
-        
-        # Кнопка выбора области
-        ttk.Button(area_frame, text="🎯 Выделить область мышью", command=self._select_area).pack(pady=10)
-        
-        # Описание
-        ttk.Label(main_frame, text="📝 Описание:").grid(row=3, column=0, sticky=tk.NW, pady=8)
-        self.desc_var = tk.StringVar()
-        desc_entry = ttk.Entry(main_frame, textvariable=self.desc_var, width=40)
-        desc_entry.grid(row=3, column=1, pady=8)
-        
-        # Кнопки
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=4, column=0, columnspan=2, pady=20)
-        
-        ttk.Button(btn_frame, text="✅ Сделать скриншот", command=self._capture).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
-        
-    def _select_area(self) -> None:
-        """Открывает диалог для выделения области."""
-        def on_confirm(area: tuple[int, int, int, int]):
-            x, y, w, h = area
-            self.x_var.set(str(x))
-            self.y_var.set(str(y))
-            self.width_var.set(str(w))
-            self.height_var.set(str(h))
-        
-        dialog = ScreenAreaSelector(self, on_confirm)
-        
-    def _capture(self) -> None:
-        """Делает скриншот с указанными параметрами."""
-        try:
-            name = self.name_var.get().strip()
-            if not name:
-                messagebox.showwarning("Предупреждение", "Введите название скриншота")
-                return
-                
-            x = int(self.x_var.get())
-            y = int(self.y_var.get())
-            w = int(self.width_var.get())
-            h = int(self.height_var.get())
-            
-            if w <= 0 or h <= 0:
-                messagebox.showwarning("Предупреждение", "Размеры области должны быть положительными")
-                return
-            
-            description = self.desc_var.get().strip()
-            
-            # Генерируем ID на основе имени пресета (если указан) и названия
-            preset_name = self.preset_var.get().strip()
-            if preset_name:
-                screenshot_id = f"{preset_name}_{name}"
-            else:
-                from datetime import datetime
-                screenshot_id = f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            
-            # Заменяем недопустимые символы в ID
-            screenshot_id = "".join(c if c.isalnum() or c in "_-" else "_" for c in screenshot_id)
-            
-            # Делаем скриншот
-            self.screenshot_manager.capture(
-                x=x, y=y, width=w, height=h,
-                screenshot_id=screenshot_id,
-                description=description
-            )
-            
-            # Если указан пресет, сохраняем связь (в будущем можно сохранить в метаданные)
-            if preset_name:
-                # Здесь можно добавить логику сохранения связи скриншот-пресет
-                pass
-            
-            self.result = True
-            self.destroy()
-            
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось сделать скриншот: {e}")
-            
-    def _cancel(self) -> None:
-        self.destroy()
+        # Кнопка выбора
+        select_btn = ctk.CTkButton(
+            main_layout,
+            text="Выбрать",
+            width=100,
+            corner_radius=20,
+            fg_color=COLOR_SCHEME["accent"],
+            hover_color=COLOR_SCHEME["accent_hover"],
+            command=lambda: self.on_select(self.window_info)
+        )
+        select_btn.pack(side="right", padx=(10, 0))
 
 
-class EditScreenshotDialog(tk.Toplevel):
-    """Диалог редактирования скриншота."""
-
-    def __init__(self, parent, screenshot: ScreenshotInfo, storage: PresetStorage):
-        super().__init__(parent)
-        self.result: bool = False
-        self.screenshot = screenshot
-        self.storage = storage
+class PresetCard(ctk.CTkFrame):
+    """Карточка пресета."""
+    
+    def __init__(self, parent, preset: NormalizationPreset, on_edit: Callable, on_delete: Callable, on_apply: Callable):
+        super().__init__(parent, fg_color=COLOR_SCHEME["bg_secondary"], corner_radius=15)
         
-        self.title("✏️ Редактировать скриншот")
-        self.geometry("450x350")
-        self.resizable(False, False)
-        
-        self.transient(parent)
-        self.grab_set()
-        
-        self._setup_ui()
-        
-        self.wait_window()
-
-    def _setup_ui(self) -> None:
-        main_frame = ttk.Frame(self, padding=15)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Название
-        ttk.Label(main_frame, text="📛 Название:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        self.name_var = tk.StringVar(value=self.screenshot.description or self.screenshot.id)
-        ttk.Entry(main_frame, textvariable=self.name_var, width=40).grid(row=0, column=1, pady=8)
-        
-        # Информация о скриншоте
-        info_frame = ttk.LabelFrame(main_frame, text="ℹ️ Информация")
-        info_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=10, ipadx=10, ipady=10)
-        
-        ttk.Label(info_frame, text=f"ID: {self.screenshot.id}").grid(row=0, column=0, sticky=tk.W, padx=10, pady=5)
-        ttk.Label(info_frame, text=f"Размер: {self.screenshot.width}x{self.screenshot.height}").grid(row=1, column=0, sticky=tk.W, padx=10, pady=5)
-        ttk.Label(info_frame, text=f"Позиция: ({self.screenshot.x}, {self.screenshot.y})").grid(row=2, column=0, sticky=tk.W, padx=10, pady=5)
-        ttk.Label(info_frame, text=f"Создан: {self.screenshot.created_at.strftime('%d.%m.%Y %H:%M')}").grid(row=3, column=0, sticky=tk.W, padx=10, pady=5)
-        
-        # Описание
-        ttk.Label(main_frame, text="📝 Описание:").grid(row=2, column=0, sticky=tk.NW, pady=8)
-        self.desc_var = tk.StringVar(value=self.screenshot.description)
-        ttk.Entry(main_frame, textvariable=self.desc_var, width=40).grid(row=2, column=1, pady=8)
-        
-        # Кнопки
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=3, column=0, columnspan=2, pady=20)
-        
-        ttk.Button(btn_frame, text="✅ Сохранить", command=self._save).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
-        
-    def _save(self) -> None:
-        # В будущем можно добавить сохранение изменений
-        self.result = True
-        self.destroy()
-        
-    def _cancel(self) -> None:
-        self.destroy()
-
-
-class PresetManagerFrame(ttk.LabelFrame):
-    """Фрейм для управления пресетами."""
-
-    def __init__(self, parent, storage: PresetStorage, on_apply: Callable[[NormalizationPreset], bool]):
-        super().__init__(parent, text="💾 Пресеты")
-        self.storage = storage
+        self.preset = preset
+        self.on_edit = on_edit
+        self.on_delete = on_delete
         self.on_apply = on_apply
+        
         self._setup_ui()
-        self._refresh_presets()
-
-    def _setup_ui(self) -> None:
-        # Поиск пресетов
-        search_frame = ttk.Frame(self)
-        search_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", self._on_search_changed)
-        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        self.search_entry.pack(fill=tk.X)
-        self.search_entry.insert(0, "🔍 Поиск пресетов...")
-        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
-        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
-
-        # Список пресетов
-        columns = ("name", "process", "position")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=8)
-
-        self.tree.heading("name", text="Имя")
-        self.tree.heading("process", text="Процесс")
-        self.tree.heading("position", text="Позиция/Размер")
-
-        self.tree.column("name", width=160, minwidth=100)
-        self.tree.column("process", width=120, minwidth=80)
-        self.tree.column("position", width=170, minwidth=120)
-
-        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
-
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
-        self.tree.bind("<Double-1>", self._on_double_click)
-
-        # Кнопки управления
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Button(btn_frame, text="▶ Применить", command=self._apply_preset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="✏️ Редактировать", command=self._edit_preset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="🗑️ Удалить", command=self._delete_preset).pack(side=tk.LEFT, padx=5)
-
-        self._selected_preset: Optional[NormalizationPreset] = None
-
-    def _on_search_focus_in(self, event):
-        if self.search_var.get().startswith("🔍"):
-            self.search_var.set("")
-
-    def _on_search_focus_out(self, event):
-        if not self.search_var.get():
-            self.search_var.set("🔍 Поиск пресетов...")
-
-    def _on_search_changed(self, *args):
-        query = self.search_var.get()
-        if query.startswith("🔍"):
-            query = ""
-        self._filter_presets(query)
-
-    def _refresh_presets(self) -> None:
-        self._filter_presets(self.search_var.get() if not self.search_var.get().startswith("🔍") else "")
-
-    def _filter_presets(self, query: str) -> None:
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
-        presets = self.storage.search_presets(query)
-        for preset in presets:
-            self.tree.insert("", tk.END, iid=preset.id, values=(
-                preset.name,
-                preset.process_name,
-                f"({preset.x}, {preset.y}) {preset.width}x{preset.height}",
-            ))
-
-    def _on_select(self, event) -> None:
-        selection = self.tree.selection()
-        if selection:
-            preset_id = selection[0]
-            self._selected_preset = self.storage.get_preset(preset_id)
-
-    def _on_double_click(self, event) -> None:
-        self._apply_preset()
-
-    def _apply_preset(self) -> None:
-        if self._selected_preset is None:
-            messagebox.showwarning("Предупреждение", "Выберите пресет для применения")
-            return
-
-        if self.on_apply(self._selected_preset):
-            messagebox.showinfo("Успех", f"Пресет '{self._selected_preset.name}' применен!")
-        else:
-            messagebox.showerror("Ошибка", f"Не удалось применить пресет. Окно '{self._selected_preset.process_name}' не найдено.")
-
-    def _edit_preset(self) -> None:
-        if self._selected_preset is None:
-            messagebox.showwarning("Предупреждение", "Выберите пресет для редактирования")
-            return
-
-        dialog = EditPresetDialog(self, self._selected_preset)
-        if dialog.result:
-            self.storage.update_preset(
-                preset_id=self._selected_preset.id,
-                name=dialog.result.get("name"),
-                process_name=dialog.result.get("process_name"),
-                x=dialog.result.get("x"),
-                y=dialog.result.get("y"),
-                width=dialog.result.get("width"),
-                height=dialog.result.get("height"),
-                description=dialog.result.get("description"),
-            )
-            self._refresh_presets()
-
-    def _delete_preset(self) -> None:
-        if self._selected_preset is None:
-            messagebox.showwarning("Предупреждение", "Выберите пресет для удаления")
-            return
-
-        if messagebox.askyesno("Подтверждение", f"Удалить пресет '{self._selected_preset.name}'?"):
-            self.storage.remove_preset(self._selected_preset.id)
-            self._selected_preset = None
-            self._refresh_presets()
-
-
-class EditPresetDialog(tk.Toplevel):
-    """Диалог редактирования/создания пресета."""
-
-    def __init__(self, parent, preset: Optional[NormalizationPreset] = None, prefill_data: Optional[dict] = None):
-        super().__init__(parent)
-        self.result: Optional[dict] = None
-        self.preset = preset
-        self.prefill_data = prefill_data
-
-        self.title("✏️ Редактировать пресет" if preset else "💾 Новый пресет")
-        self.geometry("450x400")
-        self.resizable(False, False)
-
-        self.transient(parent)
-        self.grab_set()
-
-        self._setup_ui()
-
-        self.wait_window()
-
-    def _setup_ui(self) -> None:
-        main_frame = ttk.Frame(self, padding=15)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-
-        # Имя
-        ttk.Label(main_frame, text="📛 Имя пресета:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        self.name_var = tk.StringVar(value=self.preset.name if self.preset else (self.prefill_data.get("name", "") if self.prefill_data else ""))
-        ttk.Entry(main_frame, textvariable=self.name_var, width=40).grid(row=0, column=1, pady=8)
-
-        # Процесс
-        ttk.Label(main_frame, text="🖥️ Процесс (часть заголовка):").grid(row=1, column=0, sticky=tk.W, pady=8)
-        self.process_var = tk.StringVar(value=self.preset.process_name if self.preset else (self.prefill_data.get("process_name", "") if self.prefill_data else ""))
-        ttk.Entry(main_frame, textvariable=self.process_var, width=40).grid(row=1, column=1, pady=8)
-
-        # Координаты
-        coord_frame = ttk.Frame(main_frame)
-        coord_frame.grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=8)
+    
+    def _setup_ui(self):
+        self.configure(border_width=1, border_color=COLOR_SCHEME["bg_accent"])
         
-        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5))
-        self.x_var = tk.StringVar(value=str(self.preset.x) if self.preset else (str(self.prefill_data.get("x", 0)) if self.prefill_data else "0"))
-        ttk.Entry(coord_frame, textvariable=self.x_var, width=10).grid(row=0, column=1, padx=(0, 20))
-
-        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5))
-        self.y_var = tk.StringVar(value=str(self.preset.y) if self.preset else (str(self.prefill_data.get("y", 0)) if self.prefill_data else "0"))
-        ttk.Entry(coord_frame, textvariable=self.y_var, width=10).grid(row=0, column=3)
-
-        # Размеры
-        size_frame = ttk.Frame(main_frame)
-        size_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=8)
+        main_layout = ctk.CTkFrame(self, fg_color="transparent")
+        main_layout.pack(fill="both", expand=True, padx=15, pady=12)
         
-        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5))
-        self.width_var = tk.StringVar(value=str(self.preset.width) if self.preset else (str(self.prefill_data.get("width", 800)) if self.prefill_data else "800"))
-        ttk.Entry(size_frame, textvariable=self.width_var, width=10).grid(row=0, column=1, padx=(0, 20))
-
-        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5))
-        self.height_var = tk.StringVar(value=str(self.preset.height) if self.preset else (str(self.prefill_data.get("height", 600)) if self.prefill_data else "600"))
-        ttk.Entry(size_frame, textvariable=self.height_var, width=10).grid(row=0, column=3)
-
-        # Описание
-        ttk.Label(main_frame, text="📝 Описание:").grid(row=4, column=0, sticky=tk.NW, pady=8)
-        self.desc_var = tk.StringVar(value=self.preset.description if self.preset else (self.prefill_data.get("description", "") if self.prefill_data else ""))
-        ttk.Entry(main_frame, textvariable=self.desc_var, width=40).grid(row=4, column=1, pady=8)
-
-        # Кнопки
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=20)
-
-        ttk.Button(btn_frame, text="✅ Сохранить", command=self._save).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
-
-    def _save(self) -> None:
-        try:
-            self.result = {
-                "name": self.name_var.get(),
-                "process_name": self.process_var.get(),
-                "x": int(self.x_var.get()),
-                "y": int(self.y_var.get()),
-                "width": int(self.width_var.get()),
-                "height": int(self.height_var.get()),
-                "description": self.desc_var.get(),
-            }
-            self.destroy()
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные числовые значения: {e}")
-
-    def _cancel(self) -> None:
-        self.destroy()
-
-
-class ScreenshotPresetManagerFrame(ttk.LabelFrame):
-    """Фрейм для управления пресетами скриншотов и быстрого захвата."""
-
-    def __init__(
-        self, 
-        parent, 
-        preset_storage: ScreenshotPresetStorage,
-        screenshot_manager: ScreenshotManager,
-        normalizer: ProcessNormalizer,
-        process_preset_storage: PresetStorage
-    ):
-        super().__init__(parent, text="🎯 Пресеты скриншотов")
-        self.preset_storage = preset_storage
-        self.screenshot_manager = screenshot_manager
-        self.normalizer = normalizer
-        self.process_preset_storage = process_preset_storage
-        self._setup_ui()
-        self._refresh_presets()
-
-    def _setup_ui(self) -> None:
-        # Верхняя часть - быстрый захват
-        quick_capture_frame = ttk.LabelFrame(self, text="⚡ Быстрый захват")
-        quick_capture_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Label(
-            quick_capture_frame, 
-            text="Выберите пресет процесса и пресет скриншота для мгновенного захвата:",
-            font=("Segoe UI", 10, "bold")
-        ).pack(pady=(5, 10))
-
-        # Выбор пресета процесса
-        process_frame = ttk.Frame(quick_capture_frame)
-        process_frame.pack(fill=tk.X, padx=10, pady=5)
-
-        ttk.Label(process_frame, text="📋 Пресет процесса:").grid(row=0, column=0, padx=(0, 10), sticky=tk.E)
-        self.process_preset_var = tk.StringVar()
-        self.process_preset_combo = ttk.Combobox(process_frame, textvariable=self.process_preset_var, width=30, state="readonly")
-        self.process_preset_combo.grid(row=0, column=1, sticky=tk.W)
+        # Иконка и название
+        info_frame = ctk.CTkFrame(main_layout, fg_color="transparent")
+        info_frame.pack(side="left", fill="both", expand=True)
         
-        # Заполняем комбобокс доступными пресетами процессов
-        self._refresh_process_presets()
-
-        # Выбор пресета скриншота
-        screenshot_frame = ttk.Frame(quick_capture_frame)
-        screenshot_frame.pack(fill=tk.X, padx=10, pady=5)
-
-        ttk.Label(screenshot_frame, text="📸 Пресет скриншота:").grid(row=0, column=0, padx=(0, 10), sticky=tk.E)
-        self.screenshot_preset_var = tk.StringVar()
-        self.screenshot_preset_combo = ttk.Combobox(screenshot_frame, textvariable=self.screenshot_preset_var, width=30, state="readonly")
-        self.screenshot_preset_combo.grid(row=0, column=1, sticky=tk.W)
-        
-        # Заполняем комбобокс доступными пресетами скриншотов
-        self._refresh_screenshot_presets_list()
-
-        # Кнопка быстрого захвата
-        capture_btn_frame = ttk.Frame(quick_capture_frame)
-        capture_btn_frame.pack(fill=tk.X, padx=10, pady=15)
-
-        self.quick_capture_btn = ttk.Button(
-            capture_btn_frame, 
-            text="🚀 Нормализовать + Скриншот", 
-            command=self._quick_capture
+        icon_label = ctk.CTkLabel(
+            info_frame, 
+            text="⚡",
+            font=ctk.CTkFont(size=24)
         )
-        self.quick_capture_btn.pack(side=tk.LEFT, padx=10)
-
-        ttk.Button(capture_btn_frame, text="📸 Только скриншот по пресету", command=self._capture_only).pack(side=tk.LEFT, padx=10)
-
-        # Разделитель
-        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=10, pady=15)
-
-        # Поиск пресетов
-        search_frame = ttk.Frame(self)
-        search_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        self.search_var = tk.StringVar()
-        self.search_var.trace_add("write", self._on_search_changed)
-        self.search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        self.search_entry.pack(fill=tk.X)
-        self.search_entry.insert(0, "🔍 Поиск пресетов скриншотов...")
-        self.search_entry.bind("<FocusIn>", self._on_search_focus_in)
-        self.search_entry.bind("<FocusOut>", self._on_search_focus_out)
-
-        # Список пресетов скриншотов
-        columns = ("name", "process_preset", "position", "size", "path")
-        self.tree = ttk.Treeview(self, columns=columns, show="headings", height=8)
-
-        self.tree.heading("name", text="Название")
-        self.tree.heading("process_preset", text="Пресет процесса")
-        self.tree.heading("position", text="Позиция")
-        self.tree.heading("size", text="Размер")
-        self.tree.heading("path", text="Путь")
-
-        self.tree.column("name", width=150, minwidth=100)
-        self.tree.column("process_preset", width=120, minwidth=80)
-        self.tree.column("position", width=100, minwidth=80)
-        self.tree.column("size", width=90, minwidth=60)
-        self.tree.column("path", width=200, minwidth=100)
-
-        scrollbar = ttk.Scrollbar(self, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scrollbar.set)
-
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=10)
-
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
-        self.tree.bind("<Double-1>", self._on_double_click)
-
-        # Кнопки управления
-        btn_frame = ttk.Frame(self)
-        btn_frame.pack(fill=tk.X, padx=10, pady=10)
-
-        ttk.Button(btn_frame, text="➕ Добавить пресет", command=self._add_preset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="✏️ Редактировать", command=self._edit_preset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="🗑️ Удалить", command=self._delete_preset).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="📸 Сделать скриншот", command=self._capture_selected).pack(side=tk.RIGHT, padx=5)
-
-        self._selected_preset: Optional[ScreenshotPreset] = None
-
-    def _refresh_process_presets(self) -> None:
-        """Обновляет список пресетов процессов в комбобоксе."""
-        presets = self.process_preset_storage.get_all_presets()
-        values = [p.name for p in presets]
-        self.process_preset_combo["values"] = values
-        if values:
-            self.process_preset_combo.current(0)
-
-    def _refresh_screenshot_presets_list(self) -> None:
-        """Обновляет список пресетов скриншотов в комбобоксе."""
-        presets = self.preset_storage.get_all_presets()
-        values = [p.name for p in presets]
-        self.screenshot_preset_combo["values"] = values
-        if values:
-            self.screenshot_preset_combo.current(0)
-
-    def _on_search_focus_in(self, event):
-        if self.search_var.get().startswith("🔍"):
-            self.search_var.set("")
-
-    def _on_search_focus_out(self, event):
-        if not self.search_var.get():
-            self.search_var.set("🔍 Поиск пресетов скриншотов...")
-
-    def _on_search_changed(self, *args):
-        query = self.search_var.get()
-        if query.startswith("🔍"):
-            query = ""
-        self._filter_presets(query)
-
-    def _refresh_presets(self) -> None:
-        self._filter_presets(self.search_var.get() if not self.search_var.get().startswith("🔍") else "")
-        self._refresh_screenshot_presets_list()
-
-    def _filter_presets(self, query: str) -> None:
-        for item in self.tree.get_children():
-            self.tree.delete(item)
-
-        presets = self.preset_storage.search_presets(query)
-        for preset in presets:
-            self.tree.insert("", tk.END, iid=preset.id, values=(
-                preset.name,
-                preset.process_preset_id,
-                f"({preset.x}, {preset.y})",
-                f"{preset.width}x{preset.height}",
-                preset.screenshot_path[:40] + "..." if len(preset.screenshot_path) > 40 else preset.screenshot_path,
-            ))
-
-    def _on_select(self, event) -> None:
-        selection = self.tree.selection()
-        if selection:
-            preset_id = selection[0]
-            self._selected_preset = self.preset_storage.get_preset(preset_id)
-
-    def _on_double_click(self, event) -> None:
-        self._capture_selected()
-
-    def _quick_capture(self) -> None:
-        """Выполняет быстрый захват: нормализация окна + скриншот."""
-        process_preset_name = self.process_preset_var.get().strip()
-        screenshot_preset_name = self.screenshot_preset_var.get().strip()
-
-        if not process_preset_name:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет процесса")
-            return
-
-        if not screenshot_preset_name:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет скриншота")
-            return
-
-        # Находим пресет процесса
-        process_preset = None
-        for p in self.process_preset_storage.get_all_presets():
-            if p.name == process_preset_name:
-                process_preset = p
-                break
-
-        if not process_preset:
-            messagebox.showerror("❌ Ошибка", f"Пресет процесса '{process_preset_name}' не найден")
-            return
-
-        # Находим пресет скриншота
-        screenshot_preset = None
-        for p in self.preset_storage.get_all_presets():
-            if p.name == screenshot_preset_name:
-                screenshot_preset = p
-                break
-
-        if not screenshot_preset:
-            messagebox.showerror("❌ Ошибка", f"Пресет скриншота '{screenshot_preset_name}' не найден")
-            return
-
-        # Проверяем, что пресет скриншота связан с тем же пресетом процесса
-        if screenshot_preset.process_preset_id != process_preset.id:
-            if not messagebox.askyesno(
-                "⚠️ Предупреждение",
-                f"Пресет скриншота '{screenshot_preset.name}' связан с другим пресетом процесса.\n"
-                f"Продолжить захват?"
-            ):
-                return
-
-        # Нормализуем окно
-        if not self.normalizer.apply_preset(process_preset):
-            messagebox.showerror(
-                "❌ Ошибка", 
-                f"Не удалось нормализовать окно. Процесс '{process_preset.process_name}' не найден."
-            )
-            return
-
-        # Даем окну время на перемещение
-        import time
-        time.sleep(0.3)
-
-        # Делаем скриншот
-        try:
-            from datetime import datetime
-            screenshot_id = f"{screenshot_preset.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            
-            self.preset_storage.capture_with_preset(
-                preset=screenshot_preset,
-                screenshot_manager=self.screenshot_manager,
-                screenshot_id=screenshot_id
-            )
-            
-            messagebox.showinfo(
-                "✅ Успех", 
-                f"Окно нормализовано и скриншот создан!\nПуть: {screenshot_preset.screenshot_path}"
-            )
-        except Exception as e:
-            messagebox.showerror("❌ Ошибка", f"Не удалось сделать скриншот: {e}")
-
-    def _capture_only(self) -> None:
-        """Делает скриншот только по пресету без нормализации."""
-        screenshot_preset_name = self.screenshot_preset_var.get().strip()
-
-        if not screenshot_preset_name:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет скриншота")
-            return
-
-        # Находим пресет скриншота
-        screenshot_preset = None
-        for p in self.preset_storage.get_all_presets():
-            if p.name == screenshot_preset_name:
-                screenshot_preset = p
-                break
-
-        if not screenshot_preset:
-            messagebox.showerror("❌ Ошибка", f"Пресет скриншота '{screenshot_preset_name}' не найден")
-            return
-
-        # Делаем скриншот
-        try:
-            from datetime import datetime
-            screenshot_id = f"{screenshot_preset.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            
-            self.preset_storage.capture_with_preset(
-                preset=screenshot_preset,
-                screenshot_manager=self.screenshot_manager,
-                screenshot_id=screenshot_id
-            )
-            
-            messagebox.showinfo(
-                "✅ Успех", 
-                f"Скриншот создан!\nПуть: {screenshot_preset.screenshot_path}"
-            )
-        except Exception as e:
-            messagebox.showerror("❌ Ошибка", f"Не удалось сделать скриншот: {e}")
-
-    def _capture_selected(self) -> None:
-        """Делает скриншот по выбранному в списке пресету."""
-        if self._selected_preset is None:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет для создания скриншота")
-            return
-
-        try:
-            from datetime import datetime
-            screenshot_id = f"{self._selected_preset.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            
-            self.preset_storage.capture_with_preset(
-                preset=self._selected_preset,
-                screenshot_manager=self.screenshot_manager,
-                screenshot_id=screenshot_id
-            )
-            
-            messagebox.showinfo(
-                "✅ Успех", 
-                f"Скриншот создан!\nПуть: {self._selected_preset.screenshot_path}"
-            )
-            self._refresh_presets()
-        except Exception as e:
-            messagebox.showerror("❌ Ошибка", f"Не удалось сделать скриншот: {e}")
-
-    def _add_preset(self) -> None:
-        """Открывает диалог для добавления нового пресета скриншота."""
-        dialog = NewScreenshotPresetDialog(self, self.process_preset_storage)
-        if dialog.result:
-            try:
-                self.preset_storage.add_preset(**dialog.result)
-                self._refresh_presets()
-                messagebox.showinfo("✅ Успех", "Пресет скриншота добавлен!")
-            except ValueError as e:
-                messagebox.showerror("❌ Ошибка", str(e))
-
-    def _edit_preset(self) -> None:
-        if self._selected_preset is None:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет для редактирования")
-            return
-
-        dialog = EditScreenshotPresetDialog(self, self._selected_preset, self.process_preset_storage)
-        if dialog.result:
-            try:
-                self.preset_storage.update_preset(
-                    preset_id=self._selected_preset.id,
-                    **dialog.result
-                )
-                self._refresh_presets()
-                messagebox.showinfo("✅ Успех", "Пресет обновлен!")
-            except Exception as e:
-                messagebox.showerror("❌ Ошибка", str(e))
-
-    def _delete_preset(self) -> None:
-        if self._selected_preset is None:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите пресет для удаления")
-            return
-
-        if messagebox.askyesno("Подтверждение", f"Удалить пресет скриншота '{self._selected_preset.name}'?"):
-            self.preset_storage.remove_preset(self._selected_preset.id)
-            self._selected_preset = None
-            self._refresh_presets()
-
-
-class NewScreenshotPresetDialog(tk.Toplevel):
-    """Диалог создания нового пресета скриншота."""
-
-    def __init__(self, parent, process_preset_storage: PresetStorage):
-        super().__init__(parent)
-        self.result: Optional[dict] = None
-        self.process_preset_storage = process_preset_storage
+        icon_label.pack(side="left", padx=(0, 12))
         
-        self.title("➕ Новый пресет скриншота")
-        self.geometry("550x500")
-        self.resizable(False, False)
+        text_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
+        text_frame.pack(side="left", fill="both", expand=True)
         
-        self.transient(parent)
-        self.grab_set()
+        title_label = ctk.CTkLabel(
+            text_frame,
+            text=self.preset.name,
+            font=ctk.CTkFont(size=14, weight="bold"),
+            anchor="w"
+        )
+        title_label.pack(fill="x")
         
-        self._setup_ui()
-        
-        self.wait_window()
-
-    def _setup_ui(self) -> None:
-        main_frame = ttk.Frame(self, padding=15)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Название пресета
-        ttk.Label(main_frame, text="📛 Название пресета:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        self.name_var = tk.StringVar()
-        ttk.Entry(main_frame, textvariable=self.name_var, width=50).grid(row=0, column=1, pady=8)
-        
-        # Выбор пресета процесса
-        ttk.Label(main_frame, text="🔗 Пресет процесса:").grid(row=1, column=0, sticky=tk.W, pady=8)
-        self.process_preset_var = tk.StringVar()
-        preset_combo = ttk.Combobox(main_frame, textvariable=self.process_preset_var, width=47, state="readonly")
-        preset_combo.grid(row=1, column=1, pady=8)
-        
-        # Заполняем комбобокс доступными пресетами процессов
-        presets = self.process_preset_storage.get_all_presets()
-        preset_values = [p.name for p in presets]
-        preset_combo["values"] = preset_values
-        if preset_values:
-            preset_combo.current(0)
-        
-        # Путь до скриншота
-        ttk.Label(main_frame, text="📁 Путь для сохранения:").grid(row=2, column=0, sticky=tk.W, pady=8)
-        self.path_var = tk.StringVar(value="~/Pictures/screenshots/")
-        path_frame = ttk.Frame(main_frame)
-        path_frame.grid(row=2, column=1, pady=8, sticky=tk.W)
-        ttk.Entry(path_frame, textvariable=self.path_var, width=40).pack(side=tk.LEFT)
-        ttk.Button(path_frame, text="...", command=self._browse_path).pack(side=tk.LEFT, padx=5)
-        
-        # Область выделения с кнопками-стрелочками и подсветкой
-        area_frame = ttk.LabelFrame(main_frame, text="📐 Положение и размер области")
-        area_frame.grid(row=3, column=0, columnspan=2, sticky=tk.EW, pady=10, ipadx=10, ipady=10, padx=10)
-        
-        # Координаты X, Y с кнопками-стрелочками
-        coord_frame = ttk.Frame(area_frame)
-        coord_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5))
-        self.x_var = tk.StringVar(value="0")
-        x_entry = ttk.Entry(coord_frame, textvariable=self.x_var, width=10)
-        x_entry.grid(row=0, column=1, padx=(0, 5))
-        ttk.Button(coord_frame, text="◀", command=self._decrement_x, width=3).grid(row=0, column=2, padx=2)
-        ttk.Button(coord_frame, text="▶", command=self._increment_x, width=3).grid(row=0, column=3, padx=(0, 20))
-        
-        ttk.Label(coord_frame, text="Y:").grid(row=0, column=4, padx=(0, 5))
-        self.y_var = tk.StringVar(value="0")
-        y_entry = ttk.Entry(coord_frame, textvariable=self.y_var, width=10)
-        y_entry.grid(row=0, column=5, padx=(0, 5))
-        ttk.Button(coord_frame, text="▲", command=self._increment_y, width=3).grid(row=0, column=6, padx=2)
-        ttk.Button(coord_frame, text="▼", command=self._decrement_y, width=3).grid(row=0, column=7)
-        
-        # Размеры Width, Height с кнопками-стрелочками
-        size_frame = ttk.Frame(area_frame)
-        size_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5))
-        self.width_var = tk.StringVar(value="800")
-        w_entry = ttk.Entry(size_frame, textvariable=self.width_var, width=10)
-        w_entry.grid(row=0, column=1, padx=(0, 5))
-        ttk.Button(size_frame, text="◀", command=self._decrement_width, width=3).grid(row=0, column=2, padx=2)
-        ttk.Button(size_frame, text="▶", command=self._increment_width, width=3).grid(row=0, column=3, padx=(0, 20))
-        
-        ttk.Label(size_frame, text="Высота:").grid(row=0, column=4, padx=(0, 5))
-        self.height_var = tk.StringVar(value="600")
-        h_entry = ttk.Entry(size_frame, textvariable=self.height_var, width=10)
-        h_entry.grid(row=0, column=5, padx=(0, 5))
-        ttk.Button(size_frame, text="▲", command=self._increment_height, width=3).grid(row=0, column=6, padx=2)
-        ttk.Button(size_frame, text="▼", command=self._decrement_height, width=3).grid(row=0, column=7)
+        details_label = ctk.CTkLabel(
+            text_frame,
+            text=f"{self.preset.x}, {self.preset.y}, {self.preset.width}x{self.preset.height}",
+            font=ctk.CTkFont(size=11),
+            text_color=COLOR_SCHEME["text_secondary"],
+            anchor="w"
+        )
+        details_label.pack(fill="x", pady=(4, 0))
         
         # Кнопки действий
-        action_btn_frame = ttk.Frame(area_frame)
-        action_btn_frame.pack(fill=tk.X, padx=10, pady=10)
-        ttk.Button(action_btn_frame, text="👁️ Подсветить область", command=self._highlight_area).pack(side=tk.LEFT, padx=5)
-        ttk.Button(action_btn_frame, text="🎯 Выделить мышью", command=self._select_area).pack(side=tk.LEFT, padx=5)
+        btn_frame = ctk.CTkFrame(main_layout, fg_color="transparent")
+        btn_frame.pack(side="right")
         
-        # Описание
-        ttk.Label(main_frame, text="📝 Описание:").grid(row=4, column=0, sticky=tk.NW, pady=8)
-        self.desc_var = tk.StringVar()
-        desc_entry = ttk.Entry(main_frame, textvariable=self.desc_var, width=50)
-        desc_entry.grid(row=4, column=1, pady=8)
+        apply_btn = ctk.CTkButton(
+            btn_frame,
+            text="✓",
+            width=40,
+            corner_radius=20,
+            fg_color=COLOR_SCHEME["success"],
+            hover_color="#38a169",
+            command=self.on_apply
+        )
+        apply_btn.pack(side="left", padx=5)
         
-        # Кнопки
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=20)
+        edit_btn = ctk.CTkButton(
+            btn_frame,
+            text="✎",
+            width=40,
+            corner_radius=20,
+            fg_color=COLOR_SCHEME["warning"],
+            hover_color="#dd6b20",
+            command=self.on_edit
+        )
+        edit_btn.pack(side="left", padx=5)
         
-        ttk.Button(btn_frame, text="✅ Сохранить", command=self._save).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
-        
-    def _browse_path(self) -> None:
-        """Открывает диалог выбора папки."""
-        from tkinter import filedialog
-        path = filedialog.askdirectory(initialdir="~/Pictures")
-        if path:
-            self.path_var.set(path)
+        delete_btn = ctk.CTkButton(
+            btn_frame,
+            text="🗑",
+            width=40,
+            corner_radius=20,
+            fg_color=COLOR_SCHEME["danger"],
+            hover_color="#e53e3e",
+            command=self.on_delete
+        )
+        delete_btn.pack(side="left", padx=5)
+
+
+class MainWindow(ctk.CTk):
+    """Главное окно приложения с боковой навигацией."""
     
-    def _select_area(self) -> None:
-        """Открывает диалог для выделения области."""
-        def on_confirm(area: tuple[int, int, int, int]):
-            x, y, w, h = area
-            self.x_var.set(str(x))
-            self.y_var.set(str(y))
-            self.width_var.set(str(w))
-            self.height_var.set(str(h))
+    def __init__(self):
+        super().__init__()
         
-        dialog = ScreenAreaSelector(self, on_confirm)
-
-    def _increment_x(self) -> None:
-        try:
-            val = int(self.x_var.get())
-            self.x_var.set(str(val + 10))
-        except ValueError:
-            pass
-            
-    def _decrement_x(self) -> None:
-        try:
-            val = int(self.x_var.get())
-            self.x_var.set(str(max(0, val - 10)))
-        except ValueError:
-            pass
-            
-    def _increment_y(self) -> None:
-        try:
-            val = int(self.y_var.get())
-            self.y_var.set(str(val + 10))
-        except ValueError:
-            pass
-            
-    def _decrement_y(self) -> None:
-        try:
-            val = int(self.y_var.get())
-            self.y_var.set(str(max(0, val - 10)))
-        except ValueError:
-            pass
-            
-    def _increment_width(self) -> None:
-        try:
-            val = int(self.width_var.get())
-            self.width_var.set(str(val + 10))
-        except ValueError:
-            pass
-            
-    def _decrement_width(self) -> None:
-        try:
-            val = int(self.width_var.get())
-            self.width_var.set(str(max(10, val - 10)))
-        except ValueError:
-            pass
-            
-    def _increment_height(self) -> None:
-        try:
-            val = int(self.height_var.get())
-            self.height_var.set(str(val + 10))
-        except ValueError:
-            pass
-            
-    def _decrement_height(self) -> None:
-        try:
-            val = int(self.height_var.get())
-            self.height_var.set(str(max(10, val - 10)))
-        except ValueError:
-            pass
-            
-    def _highlight_area(self) -> None:
-        """Показывает реальную подсветку области на экране."""
-        try:
-            x = int(self.x_var.get())
-            y = int(self.y_var.get())
-            w = int(self.width_var.get())
-            h = int(self.height_var.get())
-            
-            # Создаем временное окно для подсветки
-            preview = tk.Toplevel(self)
-            preview.title("Подсветка области")
-            preview.geometry(f"{w}x{h}+{x}+{y}")
-            preview.attributes("-topmost", True)
-            preview.configure(bg="#667eea")
-            preview.overrideredirect(True)
-            preview.wm_attributes("-alpha", 0.3)
-            
-            # Закрываем через 2 секунды
-            preview.after(2000, preview.destroy)
-            
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
+        self.title("Process Normalizer")
+        self.geometry("1200x800")
+        self.minsize(900, 600)
         
-    def _save(self) -> None:
-        """Сохраняет новый пресет."""
-        try:
-            name = self.name_var.get().strip()
-            if not name:
-                messagebox.showwarning("Предупреждение", "Введите название пресета")
-                return
-                
-            process_preset_name = self.process_preset_var.get().strip()
-            if not process_preset_name:
-                messagebox.showwarning("Предупреждение", "Выберите пресет процесса")
-                return
-            
-            # Находим ID пресета процесса по имени
-            process_preset_id = None
-            for p in self.process_preset_storage.get_all_presets():
-                if p.name == process_preset_name:
-                    process_preset_id = p.id
-                    break
-            
-            if not process_preset_id:
-                messagebox.showerror("Ошибка", "Выбранный пресет процесса не найден")
-                return
-                
-            x = int(self.x_var.get())
-            y = int(self.y_var.get())
-            w = int(self.width_var.get())
-            h = int(self.height_var.get())
-            
-            if w <= 0 or h <= 0:
-                messagebox.showwarning("Предупреждение", "Размеры области должны быть положительными")
-                return
-            
-            screenshot_path = self.path_var.get().strip()
-            description = self.desc_var.get().strip()
-            
-            # Генерируем ID
-            from datetime import datetime
-            preset_id = f"screenshot_{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-            preset_id = "".join(c if c.isalnum() or c in "_-" else "_" for c in preset_id)
-            
-            self.result = {
-                "preset_id": preset_id,
-                "name": name,
-                "screenshot_path": screenshot_path,
-                "process_preset_id": process_preset_id,
-                "x": x,
-                "y": y,
-                "width": w,
-                "height": h,
-                "description": description,
-            }
-            self.destroy()
-            
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось сохранить пресет: {e}")
-            
-    def _cancel(self) -> None:
-        self.destroy()
-
-
-class EditScreenshotPresetDialog(tk.Toplevel):
-    """Диалог редактирования пресета скриншота."""
-
-    def __init__(self, parent, preset: ScreenshotPreset, process_preset_storage: PresetStorage):
-        super().__init__(parent)
-        self.result: Optional[dict] = None
-        self.preset = preset
-        self.process_preset_storage = process_preset_storage
-        
-        self.title("✏️ Редактировать пресет скриншота")
-        self.geometry("550x500")
-        self.resizable(False, False)
-        
-        self.transient(parent)
-        self.grab_set()
-        
-        self._setup_ui()
-        
-        self.wait_window()
-
-    def _setup_ui(self) -> None:
-        main_frame = ttk.Frame(self, padding=15)
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Название пресета
-        ttk.Label(main_frame, text="📛 Название пресета:").grid(row=0, column=0, sticky=tk.W, pady=8)
-        self.name_var = tk.StringVar(value=self.preset.name)
-        ttk.Entry(main_frame, textvariable=self.name_var, width=50).grid(row=0, column=1, pady=8)
-        
-        # Выбор пресета процесса
-        ttk.Label(main_frame, text="🔗 Пресет процесса:").grid(row=1, column=0, sticky=tk.W, pady=8)
-        self.process_preset_var = tk.StringVar()
-        preset_combo = ttk.Combobox(main_frame, textvariable=self.process_preset_var, width=47, state="readonly")
-        preset_combo.grid(row=1, column=1, pady=8)
-        
-        # Заполняем комбобокс доступными пресетами процессов
-        presets = self.process_preset_storage.get_all_presets()
-        preset_values = [p.name for p in presets]
-        preset_combo["values"] = preset_values
-        
-        # Устанавливаем текущий пресет
-        current_process_preset_name = None
-        for p in presets:
-            if p.id == self.preset.process_preset_id:
-                current_process_preset_name = p.name
-                break
-        if current_process_preset_name and preset_values:
-            preset_combo.set(current_process_preset_name)
-        elif preset_values:
-            preset_combo.current(0)
-        
-        # Путь до скриншота
-        ttk.Label(main_frame, text="📁 Путь для сохранения:").grid(row=2, column=0, sticky=tk.W, pady=8)
-        self.path_var = tk.StringVar(value=self.preset.screenshot_path)
-        path_frame = ttk.Frame(main_frame)
-        path_frame.grid(row=2, column=1, pady=8, sticky=tk.W)
-        ttk.Entry(path_frame, textvariable=self.path_var, width=40).pack(side=tk.LEFT)
-        ttk.Button(path_frame, text="...", command=self._browse_path).pack(side=tk.LEFT, padx=5)
-        
-        # Область выделения
-        area_frame = ttk.LabelFrame(main_frame, text="📐 Положение и размер области")
-        area_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=10, ipadx=10, ipady=10)
-        
-        # Координаты
-        coord_frame = ttk.Frame(area_frame)
-        coord_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5))
-        self.x_var = tk.StringVar(value=str(self.preset.x))
-        ttk.Entry(coord_frame, textvariable=self.x_var, width=10).grid(row=0, column=1, padx=(0, 20))
-        
-        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5))
-        self.y_var = tk.StringVar(value=str(self.preset.y))
-        ttk.Entry(coord_frame, textvariable=self.y_var, width=10).grid(row=0, column=3)
-        
-        # Размеры
-        size_frame = ttk.Frame(area_frame)
-        size_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5))
-        self.width_var = tk.StringVar(value=str(self.preset.width))
-        ttk.Entry(size_frame, textvariable=self.width_var, width=10).grid(row=0, column=1, padx=(0, 20))
-        
-        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5))
-        self.height_var = tk.StringVar(value=str(self.preset.height))
-        ttk.Entry(size_frame, textvariable=self.height_var, width=10).grid(row=0, column=3)
-        
-        # Кнопка выбора области
-        ttk.Button(area_frame, text="🎯 Выделить область мышью", command=self._select_area).pack(pady=10)
-        
-        # Описание
-        ttk.Label(main_frame, text="📝 Описание:").grid(row=4, column=0, sticky=tk.NW, pady=8)
-        self.desc_var = tk.StringVar(value=self.preset.description)
-        desc_entry = ttk.Entry(main_frame, textvariable=self.desc_var, width=50)
-        desc_entry.grid(row=4, column=1, pady=8)
-        
-        # Кнопки
-        btn_frame = ttk.Frame(main_frame)
-        btn_frame.grid(row=5, column=0, columnspan=2, pady=20)
-        
-        ttk.Button(btn_frame, text="✅ Сохранить", command=self._save).pack(side=tk.LEFT, padx=10)
-        ttk.Button(btn_frame, text="❌ Отмена", command=self._cancel).pack(side=tk.LEFT, padx=10)
-        
-    def _browse_path(self) -> None:
-        """Открывает диалог выбора папки."""
-        from tkinter import filedialog
-        path = filedialog.askdirectory(initialdir=self.preset.screenshot_path)
-        if path:
-            self.path_var.set(path)
-    
-    def _select_area(self) -> None:
-        """Открывает диалог для выделения области."""
-        def on_confirm(area: tuple[int, int, int, int]):
-            x, y, w, h = area
-            self.x_var.set(str(x))
-            self.y_var.set(str(y))
-            self.width_var.set(str(w))
-            self.height_var.set(str(h))
-        
-        dialog = ScreenAreaSelector(self, on_confirm)
-        
-    def _save(self) -> None:
-        """Сохраняет изменения."""
-        try:
-            name = self.name_var.get().strip()
-            if not name:
-                messagebox.showwarning("Предупреждение", "Введите название пресета")
-                return
-                
-            process_preset_name = self.process_preset_var.get().strip()
-            
-            # Находим ID пресета процесса по имени
-            process_preset_id = None
-            for p in self.process_preset_storage.get_all_presets():
-                if p.name == process_preset_name:
-                    process_preset_id = p.id
-                    break
-            
-            if not process_preset_id:
-                messagebox.showerror("Ошибка", "Выбранный пресет процесса не найден")
-                return
-                
-            x = int(self.x_var.get())
-            y = int(self.y_var.get())
-            w = int(self.width_var.get())
-            h = int(self.height_var.get())
-            
-            if w <= 0 or h <= 0:
-                messagebox.showwarning("Предупреждение", "Размеры области должны быть положительными")
-                return
-            
-            screenshot_path = self.path_var.get().strip()
-            description = self.desc_var.get().strip()
-            
-            self.result = {
-                "name": name,
-                "screenshot_path": screenshot_path,
-                "process_preset_id": process_preset_id,
-                "x": x,
-                "y": y,
-                "width": w,
-                "height": h,
-                "description": description,
-            }
-            self.destroy()
-            
-        except ValueError as e:
-            messagebox.showerror("Ошибка", f"Некорректные значения: {e}")
-        except Exception as e:
-            messagebox.showerror("Ошибка", f"Не удалось сохранить изменения: {e}")
-            
-    def _cancel(self) -> None:
-        self.destroy()
-
-
-class NormalizerApp(ttk.Frame):
-    """Основное приложение для нормализации процессов с вкладками."""
-
-    def __init__(self, root):
-        super().__init__(root)
-        self.root = root
-        self.root.title("🚀 Automizer - Нормализация процессов и скриншоты")
-        self.root.geometry("1100x800")
-
+        # Инициализация менеджеров
+        self.window_manager = WindowManager()
         self.normalizer = ProcessNormalizer()
-        self.storage = PresetStorage()
+        self.preset_storage = PresetStorage()
         self.screenshot_manager = ScreenshotManager()
         self.screenshot_preset_storage = ScreenshotPresetStorage()
-
-        # Применяем современный стиль
-        apply_modern_style(root)
-
-        self._selected_window: Optional[WindowInfo] = None
-
+        
+        self.current_window: Optional[WindowInfo] = None
+        
         self._setup_ui()
-
-    def _setup_ui(self) -> None:
-        self.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
-
-        # Создаем вкладки
-        self.notebook = ttk.Notebook(self)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
-
-        # Вкладка 1: Выбор процесса и настройка
-        tab1 = ttk.Frame(self.notebook)
-        self.notebook.add(tab1, text="📋 Выбор процесса")
-        self._setup_tab1(tab1)
-
-        # Вкладка 2: Пресеты процессов
-        tab2 = ttk.Frame(self.notebook)
-        self.notebook.add(tab2, text="💾 Пресеты процессов")
-        self._setup_tab2(tab2)
-
-        # Вкладка 3: Скриншоты
-        tab3 = ttk.Frame(self.notebook)
-        self.notebook.add(tab3, text="📸 Скриншоты")
-        self._setup_tab3(tab3)
-
-        # Вкладка 4: Пресеты скриншотов
-        tab4 = ttk.Frame(self.notebook)
-        self.notebook.add(tab4, text="🎯 Пресеты скриншотов")
-        self._setup_tab4(tab4)
-
-    def _setup_tab3(self, parent) -> None:
-        """Настройка третьей вкладки - управление скриншотами."""
-        self.screenshot_manager_frame = ScreenshotManagerFrame(parent, self.screenshot_manager, self.storage)
-        self.screenshot_manager_frame.pack(fill=tk.BOTH, expand=True)
-
-    def _setup_tab4(self, parent) -> None:
-        """Настройка четвертой вкладки - пресеты скриншотов и быстрый захват."""
-        self.screenshot_preset_manager_frame = ScreenshotPresetManagerFrame(
-            parent, 
-            self.screenshot_preset_storage, 
-            self.screenshot_manager,
-            self.normalizer,
-            self.storage
+        self._load_processes()
+    
+    def _setup_ui(self):
+        # Основной layout с grid
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+        
+        # Боковая панель
+        sidebar = ctk.CTkFrame(self, width=200, corner_radius=0)
+        sidebar.grid(row=0, column=0, sticky="nsew")
+        sidebar.grid_propagate(False)
+        
+        # Логотип
+        logo_label = ctk.CTkLabel(
+            sidebar,
+            text="🎯 Process\nNormalizer",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            justify="center"
         )
-        self.screenshot_preset_manager_frame.pack(fill=tk.BOTH, expand=True)
-
-    def _setup_tab1(self, parent) -> None:
-        """Настройка первой вкладки - выбор процесса и настройка позиции."""
-        # Верхняя часть - выбор процесса и позиция
-        top_frame = ttk.Frame(parent)
-        top_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-
-        # Левая колонка - выбор процесса
-        left_frame = ttk.Frame(top_frame)
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-
-        self.process_selector = ProcessSelectorFrame(left_frame, on_select=self._on_process_selected)
-        self.process_selector.pack(fill=tk.BOTH, expand=True)
-
-        # Правая колонка - позиция и размер
-        right_frame = ttk.Frame(top_frame)
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
-        self.position_size_frame = PositionSizeFrame(right_frame)
-        self.position_size_frame.pack(fill=tk.X, pady=(0, 15))
-
-        # Кнопки действий
-        action_frame = ttk.Frame(right_frame)
-        action_frame.pack(fill=tk.X)
-
-        ttk.Button(action_frame, text="✅ Нормализовать окно", command=self._normalize_window).pack(fill=tk.X, pady=3)
-        ttk.Button(action_frame, text="💾 Сохранить как пресет", command=self._save_as_preset).pack(fill=tk.X, pady=3)
-
-    def _setup_tab2(self, parent) -> None:
-        """Настройка второй вкладки - управление пресетами."""
-        self.preset_manager = PresetManagerFrame(parent, self.storage, on_apply=self._apply_preset)
-        self.preset_manager.pack(fill=tk.BOTH, expand=True)
-
-    def _on_process_selected(self, window: WindowInfo) -> None:
-        self._selected_window = window
-        self.position_size_frame.set_from_window(window)
-
-    def _normalize_window(self) -> None:
-        window = self.process_selector.get_selected_window()
-        if window is None:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите окно для нормализации")
+        logo_label.pack(pady=30)
+        
+        # Навигационные кнопки
+        nav_buttons = [
+            ("🏠 Главная", self._show_home),
+            ("🎯 Процессы", self._show_processes),
+            ("⚡ Пресеты", self._show_presets),
+            ("📸 Скриншоты", self._show_screenshots),
+            ("⚙️ Настройки", self._show_settings),
+        ]
+        
+        for text, command in nav_buttons:
+            btn = ctk.CTkButton(
+                sidebar,
+                text=text,
+                height=50,
+                corner_radius=10,
+                fg_color="transparent",
+                hover_color=COLOR_SCHEME["bg_accent"],
+                anchor="w",
+                padx=20,
+                command=command
+            )
+            btn.pack(fill="x", padx=10, pady=5)
+        
+        # Основная область контента
+        self.content_frame = ctk.CTkFrame(self, fg_color=COLOR_SCHEME["bg_primary"], corner_radius=0)
+        self.content_frame.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
+        self.content_frame.grid_columnconfigure(0, weight=1)
+        self.content_frame.grid_rowconfigure(0, weight=1)
+        
+        # Контейнеры для разных вкладок
+        self.home_container = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
+        self.processes_container = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
+        self.presets_container = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
+        self.screenshots_container = ctk.CTkScrollableFrame(self.content_frame, fg_color="transparent")
+        self.settings_container = ctk.CTkFrame(self.content_frame, fg_color="transparent")
+        
+        self._setup_home_tab()
+        self._setup_processes_tab()
+        self._setup_presets_tab()
+        self._setup_screenshots_tab()
+        self._setup_settings_tab()
+        
+        # Показать главную по умолчанию
+        self._show_home()
+    
+    def _clear_content(self):
+        for container in [self.home_container, self.processes_container, 
+                          self.presets_container, self.screenshots_container, 
+                          self.settings_container]:
+            container.grid_forget()
+    
+    def _show_home(self):
+        self._clear_content()
+        self.home_container.grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+    
+    def _show_processes(self):
+        self._clear_content()
+        self.processes_container.grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+        self._load_processes()
+    
+    def _show_presets(self):
+        self._clear_content()
+        self.presets_container.grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+        self._load_presets()
+    
+    def _show_screenshots(self):
+        self._clear_content()
+        self.screenshots_container.grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+        self._load_screenshots()
+    
+    def _show_settings(self):
+        self._clear_content()
+        self.settings_container.grid(row=0, column=0, sticky="nsew", padx=30, pady=30)
+    
+    def _setup_home_tab(self):
+        # Заголовок
+        header = ctk.CTkLabel(
+            self.home_container,
+            text="Добро пожаловать!",
+            font=ctk.CTkFont(size=28, weight="bold"),
+            text_color=COLOR_SCHEME["text_primary"]
+        )
+        header.pack(pady=(0, 10))
+        
+        subtitle = ctk.CTkLabel(
+            self.home_container,
+            text="Управляйте окнами процессов и создавайте пресеты",
+            font=ctk.CTkFont(size=16),
+            text_color=COLOR_SCHEME["text_secondary"]
+        )
+        subtitle.pack(pady=(0, 30))
+        
+        # Статус
+        status_frame = ctk.CTkFrame(self.home_container, fg_color=COLOR_SCHEME["bg_secondary"], corner_radius=15)
+        status_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            status_frame,
+            text="📊 Статистика",
+            font=ctk.CTkFont(size=18, weight="bold")
+        ).pack(pady=15)
+        
+        stats_grid = ctk.CTkFrame(status_frame, fg_color="transparent")
+        stats_grid.pack(fill="x", padx=20, pady=10)
+        
+        presets_count = len(self.preset_storage.get_all_presets())
+        screenshots_count = len(self.screenshot_preset_storage.get_all_presets())
+        
+        stat_items = [
+            ("🎯 Пресетов", str(presets_count)),
+            ("📸 Скриншотов", str(screenshots_count)),
+            ("🖥️ Процессов", "Активно"),
+        ]
+        
+        for i, (label, value) in enumerate(stat_items):
+            stat_box = ctk.CTkFrame(stats_grid, fg_color=COLOR_SCHEME["bg_accent"], corner_radius=10)
+            stat_box.grid(row=0, column=i, padx=10, pady=10, sticky="nsew")
+            stats_grid.grid_columnconfigure(i, weight=1)
+            
+            ctk.CTkLabel(
+                stat_box,
+                text=value,
+                font=ctk.CTkFont(size=24, weight="bold"),
+                text_color=COLOR_SCHEME["accent"]
+            ).pack(pady=(15, 5))
+            
+            ctk.CTkLabel(
+                stat_box,
+                text=label,
+                font=ctk.CTkFont(size=12),
+                text_color=COLOR_SCHEME["text_secondary"]
+            ).pack(pady=(0, 15))
+    
+    def _setup_processes_tab(self):
+        # Заголовок
+        header_frame = ctk.CTkFrame(self.processes_container, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="🎯 Выбор процесса",
+            font=ctk.CTkFont(size=24, weight="bold")
+        ).pack(side="left")
+        
+        refresh_btn = ctk.CTkButton(
+            header_frame,
+            text="⟳ Обновить",
+            command=self._load_processes,
+            width=120,
+            corner_radius=20
+        )
+        refresh_btn.pack(side="right")
+        
+        # Поиск
+        search_frame = ctk.CTkFrame(self.processes_container, fg_color="transparent")
+        search_frame.pack(fill="x", pady=(0, 20))
+        
+        self.search_var = ctk.StringVar()
+        self.search_var.trace_add("write", lambda *args: self._filter_processes())
+        
+        search_entry = ctk.CTkEntry(
+            search_frame,
+            placeholder_text="🔍 Поиск по названию окна...",
+            textvariable=self.search_var,
+            height=45,
+            corner_radius=20
+        )
+        search_entry.pack(fill="x")
+        
+        # Список процессов
+        self.processes_list_frame = ctk.CTkFrame(self.processes_container, fg_color="transparent")
+        self.processes_list_frame.pack(fill="both", expand=True)
+    
+    def _load_processes(self):
+        # Очистка списка
+        for widget in self.processes_list_frame.winfo_children():
+            widget.destroy()
+        
+        windows = self.window_manager.get_windows()
+        
+        if not windows:
+            ctk.CTkLabel(
+                self.processes_list_frame,
+                text="Нет активных окон",
+                font=ctk.CTkFont(size=16),
+                text_color=COLOR_SCHEME["text_secondary"]
+            ).pack(pady=50)
             return
-
+        
+        # Создание карточек
+        for window in windows:
+            card = ProcessCard(
+                self.processes_list_frame,
+                window,
+                on_select=self._on_process_selected
+            )
+            card.pack(fill="x", pady=8, padx=5)
+    
+    def _filter_processes(self):
+        query = self.search_var.get().lower()
+        
+        for widget in self.processes_list_frame.winfo_children():
+            if isinstance(widget, ProcessCard):
+                if query and query not in widget.window_info.title.lower():
+                    widget.pack_forget()
+                else:
+                    widget.pack(fill="x", pady=8, padx=5)
+    
+    def _on_process_selected(self, window: WindowInfo):
+        self.current_window = window
+        
+        # Открыть редактор координат
+        dialog = CoordinateEditorDialog(
+            self,
+            title="📐 Настройка позиции и размера",
+            x=window.x,
+            y=window.y,
+            width=window.width,
+            height=window.height,
+            on_confirm=lambda x, y, w, h: self._apply_position(window, x, y, w, h)
+        )
+    
+    def _apply_position(self, window: WindowInfo, x: int, y: int, width: int, height: int):
         try:
-            x, y, width, height = self.position_size_frame.get_values()
-        except ValueError as e:
-            messagebox.showerror("❌ Ошибка", f"Некорректные значения: {e}")
+            self.normalizer.normalize_window(
+                window.window_id,
+                x=x,
+                y=y,
+                width=width,
+                height=height
+            )
+            messagebox.showinfo("Успех", f"Окно '{window.title}' обновлено!")
+            self._load_processes()
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось обновить окно: {e}")
+    
+    def _setup_presets_tab(self):
+        # Заголовок
+        header_frame = ctk.CTkFrame(self.presets_container, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="⚡ Пресеты процессов",
+            font=ctk.CTkFont(size=24, weight="bold")
+        ).pack(side="left")
+        
+        add_btn = ctk.CTkButton(
+            header_frame,
+            text="+ Добавить пресет",
+            command=self._add_preset,
+            corner_radius=20
+        )
+        add_btn.pack(side="right")
+        
+        # Список пресетов
+        self.presets_list_frame = ctk.CTkFrame(self.presets_container, fg_color="transparent")
+        self.presets_list_frame.pack(fill="both", expand=True)
+    
+    def _load_presets(self):
+        # Очистка списка
+        for widget in self.presets_list_frame.winfo_children():
+            widget.destroy()
+        
+        presets = self.preset_storage.get_all_presets()
+        
+        if not presets:
+            ctk.CTkLabel(
+                self.presets_list_frame,
+                text="Нет сохраненных пресетов",
+                font=ctk.CTkFont(size=16),
+                text_color=COLOR_SCHEME["text_secondary"]
+            ).pack(pady=50)
             return
-
-        if self.normalizer.normalize_window(window.window_id, x, y, width, height):
-            messagebox.showinfo("✅ Успех", "Окно нормализовано!")
-        else:
-            messagebox.showerror("❌ Ошибка", "Не удалось нормализовать окно")
-
-    def _save_as_preset(self) -> None:
-        window = self.process_selector.get_selected_window()
-        if window is None:
-            messagebox.showwarning("⚠️ Предупреждение", "Выберите окно для создания пресета")
+        
+        # Создание карточек
+        for preset in presets:
+            card = PresetCard(
+                self.presets_list_frame,
+                preset,
+                on_edit=lambda p=preset: self._edit_preset(p),
+                on_delete=lambda p=preset: self._delete_preset(p),
+                on_apply=lambda p=preset: self._apply_preset(p)
+            )
+            card.pack(fill="x", pady=8, padx=5)
+    
+    def _add_preset(self):
+        dialog = CoordinateEditorDialog(
+            self,
+            title="➕ Новый пресет",
+            on_confirm=self._save_preset
+        )
+    
+    def _save_preset(self, x: int, y: int, width: int, height: int):
+        name_dialog = ctk.CTkInputDialog(
+            text="Введите название пресета:",
+            title="Сохранение пресета"
+        )
+        name = name_dialog.get_input()
+        
+        if name:
+            preset = NormalizationPreset(
+                name=name,
+                x=x,
+                y=y,
+                width=width,
+                height=height
+            )
+            self.preset_storage.save_preset(preset)
+            self._load_presets()
+            messagebox.showinfo("Успех", "Пресет сохранен!")
+    
+    def _edit_preset(self, preset: NormalizationPreset):
+        dialog = CoordinateEditorDialog(
+            self,
+            title=f"✏️ Редактирование: {preset.name}",
+            x=preset.x,
+            y=preset.y,
+            width=preset.width,
+            height=preset.height,
+            on_confirm=lambda x, y, w, h: self._update_preset(preset, x, y, w, h)
+        )
+    
+    def _update_preset(self, preset: NormalizationPreset, x: int, y: int, width: int, height: int):
+        preset.x = x
+        preset.y = y
+        preset.width = width
+        preset.height = height
+        self.preset_storage.save_preset(preset)
+        self._load_presets()
+        messagebox.showinfo("Успех", "Пресет обновлен!")
+    
+    def _delete_preset(self, preset: NormalizationPreset):
+        if messagebox.askyesno("Подтверждение", f"Удалить пресет '{preset.name}'?"):
+            self.preset_storage.delete_preset(preset.id)
+            self._load_presets()
+    
+    def _apply_preset(self, preset: NormalizationPreset):
+        if not self.current_window:
+            messagebox.showwarning("Внимание", "Сначала выберите процесс на вкладке 'Процессы'")
             return
-
+        
         try:
-            x, y, width, height = self.position_size_frame.get_values()
-        except ValueError as e:
-            messagebox.showerror("❌ Ошибка", f"Некорректные значения: {e}")
+            self.normalizer.normalize_window(
+                self.current_window.window_id,
+                x=preset.x,
+                y=preset.y,
+                width=preset.width,
+                height=preset.height
+            )
+            messagebox.showinfo("Успех", f"Пресет '{preset.name}' применен к '{self.current_window.title}'")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось применить пресет: {e}")
+    
+    def _setup_screenshots_tab(self):
+        # Заголовок
+        header_frame = ctk.CTkFrame(self.screenshots_container, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        ctk.CTkLabel(
+            header_frame,
+            text="📸 Пресеты скриншотов",
+            font=ctk.CTkFont(size=24, weight="bold")
+        ).pack(side="left")
+        
+        add_btn = ctk.CTkButton(
+            header_frame,
+            text="+ Добавить область",
+            command=self._add_screenshot_preset,
+            corner_radius=20
+        )
+        add_btn.pack(side="right")
+        
+        # Список пресетов скриншотов
+        self.screenshots_list_frame = ctk.CTkFrame(self.screenshots_container, fg_color="transparent")
+        self.screenshots_list_frame.pack(fill="both", expand=True)
+    
+    def _load_screenshots(self):
+        # Очистка списка
+        for widget in self.screenshots_list_frame.winfo_children():
+            widget.destroy()
+        
+        presets = self.screenshot_preset_storage.get_all_presets()
+        
+        if not presets:
+            ctk.CTkLabel(
+                self.screenshots_list_frame,
+                text="Нет сохраненных областей для скриншотов",
+                font=ctk.CTkFont(size=16),
+                text_color=COLOR_SCHEME["text_secondary"]
+            ).pack(pady=50)
             return
+        
+        # Создание карточек
+        for preset in presets:
+            card = ctk.CTkFrame(
+                self.screenshots_list_frame,
+                fg_color=COLOR_SCHEME["bg_secondary"],
+                corner_radius=15
+            )
+            card.configure(border_width=1, border_color=COLOR_SCHEME["bg_accent"])
+            card.pack(fill="x", pady=8, padx=5)
+            
+            main_layout = ctk.CTkFrame(card, fg_color="transparent")
+            main_layout.pack(fill="both", expand=True, padx=15, pady=12)
+            
+            # Информация
+            info_frame = ctk.CTkFrame(main_layout, fg_color="transparent")
+            info_frame.pack(side="left", fill="both", expand=True)
+            
+            ctk.CTkLabel(info_frame, text="📸", font=ctk.CTkFont(size=24)).pack(side="left", padx=(0, 12))
+            
+            text_frame = ctk.CTkFrame(info_frame, fg_color="transparent")
+            text_frame.pack(side="left", fill="both", expand=True)
+            
+            ctk.CTkLabel(
+                text_frame,
+                text=preset.name,
+                font=ctk.CTkFont(size=14, weight="bold")
+            ).pack(fill="x")
+            
+            ctk.CTkLabel(
+                text_frame,
+                text=f"{preset.x}, {preset.y}, {preset.width}x{preset.height}",
+                font=ctk.CTkFont(size=11),
+                text_color=COLOR_SCHEME["text_secondary"]
+            ).pack(fill="x", pady=(4, 0))
+            
+            # Кнопки
+            btn_frame = ctk.CTkFrame(main_layout, fg_color="transparent")
+            btn_frame.pack(side="right")
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="📷",
+                width=40,
+                corner_radius=20,
+                fg_color=COLOR_SCHEME["accent"],
+                hover_color=COLOR_SCHEME["accent_hover"],
+                command=lambda p=preset: self._take_screenshot(p)
+            ).pack(side="left", padx=5)
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="✎",
+                width=40,
+                corner_radius=20,
+                fg_color=COLOR_SCHEME["warning"],
+                hover_color="#dd6b20",
+                command=lambda p=preset: self._edit_screenshot_preset(p)
+            ).pack(side="left", padx=5)
+            
+            ctk.CTkButton(
+                btn_frame,
+                text="🗑",
+                width=40,
+                corner_radius=20,
+                fg_color=COLOR_SCHEME["danger"],
+                hover_color="#e53e3e",
+                command=lambda p=preset: self._delete_screenshot_preset(p)
+            ).pack(side="left", padx=5)
+    
+    def _add_screenshot_preset(self):
+        dialog = CoordinateEditorDialog(
+            self,
+            title="📸 Новая область для скриншота",
+            on_confirm=self._save_screenshot_preset
+        )
+    
+    def _save_screenshot_preset(self, x: int, y: int, width: int, height: int):
+        name_dialog = ctk.CTkInputDialog(
+            text="Введите название области:",
+            title="Сохранение области"
+        )
+        name = name_dialog.get_input()
+        
+        if name:
+            preset = ScreenshotPreset(
+                name=name,
+                x=x,
+                y=y,
+                width=width,
+                height=height
+            )
+            self.screenshot_preset_storage.save_preset(preset)
+            self._load_screenshots()
+            messagebox.showinfo("Успех", "Область сохранена!")
+    
+    def _edit_screenshot_preset(self, preset: ScreenshotPreset):
+        dialog = CoordinateEditorDialog(
+            self,
+            title=f"✏️ Редактирование: {preset.name}",
+            x=preset.x,
+            y=preset.y,
+            width=preset.width,
+            height=preset.height,
+            on_confirm=lambda x, y, w, h: self._update_screenshot_preset(preset, x, y, w, h)
+        )
+    
+    def _update_screenshot_preset(self, preset: ScreenshotPreset, x: int, y: int, width: int, height: int):
+        preset.x = x
+        preset.y = y
+        preset.width = width
+        preset.height = height
+        self.screenshot_preset_storage.save_preset(preset)
+        self._load_screenshots()
+        messagebox.showinfo("Успех", "Область обновлена!")
+    
+    def _delete_screenshot_preset(self, preset: ScreenshotPreset):
+        if messagebox.askyesno("Подтверждение", f"Удалить область '{preset.name}'?"):
+            self.screenshot_preset_storage.delete_preset(preset.id)
+            self._load_screenshots()
+    
+    def _take_screenshot(self, preset: ScreenshotPreset):
+        try:
+            screenshot = self.screenshot_manager.capture_region(
+                x=preset.x,
+                y=preset.y,
+                width=preset.width,
+                height=preset.height
+            )
+            
+            filename = f"screenshot_{preset.name}_{screenshot.timestamp}.png"
+            screenshot.save(filename)
+            
+            messagebox.showinfo("Успех", f"Скриншот сохранен: {filename}")
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось сделать скриншот: {e}")
+    
+    def _setup_settings_tab(self):
+        ctk.CTkLabel(
+            self.settings_container,
+            text="⚙️ Настройки",
+            font=ctk.CTkFont(size=24, weight="bold")
+        ).pack(pady=30)
+        
+        settings_frame = ctk.CTkFrame(self.settings_container, fg_color=COLOR_SCHEME["bg_secondary"], corner_radius=15)
+        settings_frame.pack(fill="x", padx=50, pady=20)
+        
+        ctk.CTkLabel(
+            settings_frame,
+            text="Настройки будут добавлены в будущих версиях",
+            font=ctk.CTkFont(size=16),
+            text_color=COLOR_SCHEME["text_secondary"]
+        ).pack(pady=40)
 
-        # Передаем текущие параметры окна в диалог
-        prefill_data = {
-            "name": window.title[:30] + "..." if len(window.title) > 30 else window.title,
-            "process_name": window.title,
-            "x": x,
-            "y": y,
-            "width": width,
-            "height": height,
-            "description": "",
-        }
 
-        dialog = EditPresetDialog(self, prefill_data=prefill_data)
-        if dialog.result:
-            preset_id = f"preset_{len(self.storage.get_all_presets()) + 1}"
-            try:
-                self.storage.add_preset(
-                    preset_id=preset_id,
-                    name=dialog.result["name"],
-                    process_name=dialog.result["process_name"],
-                    x=x,
-                    y=y,
-                    width=width,
-                    height=height,
-                    description=dialog.result["description"],
-                )
-                self.preset_manager._refresh_presets()
-                messagebox.showinfo("✅ Успех", "Пресет сохранен!")
-                # Переключаемся на вкладку с пресетами
-                self.notebook.select(1)
-            except ValueError as e:
-                messagebox.showerror("❌ Ошибка", str(e))
-
-    def _apply_preset(self, preset: NormalizationPreset) -> bool:
-        return self.normalizer.apply_preset(preset)
-
-
-def main():
+def run_app():
     """Запуск приложения."""
-    root = tk.Tk()
-    app = NormalizerApp(root)
-    root.mainloop()
+    app = MainWindow()
+    app.mainloop()
 
 
 if __name__ == "__main__":
-    main()
+    run_app()
