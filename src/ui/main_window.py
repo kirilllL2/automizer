@@ -356,9 +356,9 @@ class WindowSelectionWidget(QWidget):
         self.y_input = QSpinBox()
         self.y_input.setRange(-10000, 10000)
         self.width_input = QSpinBox()
-        self.width_input.setRange(100, 10000)
+        self.width_input.setRange(1, 10000)
         self.height_input = QSpinBox()
-        self.height_input.setRange(100, 10000)
+        self.height_input.setRange(1, 10000)
         
         # Лейблы над полями (небольшие надписи)
         x_label = QLabel("X")
@@ -1108,11 +1108,11 @@ class PresetDialog(QDialog):
         form.addRow("Y:", self.y_input)
         
         self.width_input = QSpinBox()
-        self.width_input.setRange(100, 10000)
+        self.width_input.setRange(1, 10000)
         form.addRow("Ширина:", self.width_input)
         
         self.height_input = QSpinBox()
-        self.height_input.setRange(100, 10000)
+        self.height_input.setRange(1, 10000)
         form.addRow("Высота:", self.height_input)
         
         self.desc_input = QLineEdit()
@@ -1474,11 +1474,11 @@ class ScreenshotPresetDialog(QDialog):
         form.addRow("Y:", self.y_input)
         
         self.width_input = QSpinBox()
-        self.width_input.setRange(100, 10000)
+        self.width_input.setRange(1, 10000)
         form.addRow("Ширина:", self.width_input)
         
         self.height_input = QSpinBox()
-        self.height_input.setRange(100, 10000)
+        self.height_input.setRange(1, 10000)
         form.addRow("Высота:", self.height_input)
         
         # Кнопка предпросмотра области
