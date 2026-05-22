@@ -1857,7 +1857,18 @@ class ScreenshotPresetDialog(QDialog):
         if not process_preset_id:
             use_relative_coords = False
         
+        # Генерируем preset_id из имени (для нового пресета) или используем существующий
+        preset_id = self.preset.id if self.preset else name.lower().replace(" ", "_")
+        
+        # Получаем window_id если используются относительные координаты
+        window_id = None
+        if use_relative_coords and process_preset_id and self.process_storage:
+            process_preset = self.process_storage.get_preset(process_preset_id)
+            if process_preset:
+                window_id = process_preset.window_id
+        
         return {
+            "preset_id": preset_id,
             "name": name,
             "process_preset_id": process_preset_id or "default",
             "x": self.x_input.value(),
@@ -1867,6 +1878,7 @@ class ScreenshotPresetDialog(QDialog):
             "screenshot_path": screenshot_path,
             "description": self.desc_input.text(),
             "use_relative_coords": use_relative_coords,
+            "window_id": window_id,
         }
 
 
