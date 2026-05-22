@@ -2447,7 +2447,6 @@ class ActionDialog(QDialog):
         norm_widget = QWidget()
         norm_layout = QFormLayout(norm_widget)
         self.norm_preset_combo = QComboBox()
-        self._update_presets()
         norm_layout.addRow("Пресет нормализации:", self.norm_preset_combo)
         self.settings_stack.addWidget(norm_widget)
         
@@ -2455,7 +2454,6 @@ class ActionDialog(QDialog):
         focus_widget = QWidget()
         focus_layout = QFormLayout(focus_widget)
         self.focus_preset_combo = QComboBox()
-        self._update_presets()
         focus_layout.addRow("Пресет окна:", self.focus_preset_combo)
         self.settings_stack.addWidget(focus_widget)
         
@@ -2487,6 +2485,9 @@ class ActionDialog(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        
+        # Обновляем пресеты после создания всех виджетов
+        self._update_presets()
         
         # Устанавливаем первый тип
         self._on_type_changed(self.type_combo.currentText())
