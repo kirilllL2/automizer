@@ -1,8 +1,9 @@
 """
 Главное окно приложения Automizer.
-Современный красивый резиновый интерфейс с 2 вкладками:
+Современный красивый резиновый интерфейс с 3 вкладками:
 1. Выбор процесса - выбор окна и настройка позиции/размеров
 2. Пресеты скриншотов - управление пресетами скриншотов (скриншот создается автоматически)
+3. CV распознавание - поиск областей на экране по изображениям пресетов
 """
 
 from PyQt6.QtWidgets import (
@@ -10,16 +11,19 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QScrollArea, QGridLayout, QSpacerItem,
     QSizePolicy, QMessageBox, QFileDialog, QDialog, QDialogButtonBox,
-    QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect, QCheckBox
+    QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect, QCheckBox,
+    QDoubleSpinBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
+from pathlib import Path
 
 from src.normalizer import ProcessNormalizer, NormalizationPreset
 from src.window_manager import WindowManager, WindowInfo
 from src.storage import PresetStorage
 from src.screenshot import ScreenshotManager
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
+from src.cv import CVMatcher, MatchResult
 
 
 class ModernStyle:
@@ -353,9 +357,9 @@ class WindowSelectionWidget(QWidget):
         self.y_input = QSpinBox()
         self.y_input.setRange(-10000, 10000)
         self.width_input = QSpinBox()
-        self.width_input.setRange(100, 10000)
+        self.width_input.setRange(1, 10000)
         self.height_input = QSpinBox()
-        self.height_input.setRange(100, 10000)
+        self.height_input.setRange(1, 10000)
         
         # Лейблы над полями (небольшие надписи)
         x_label = QLabel("X")
@@ -1105,11 +1109,11 @@ class PresetDialog(QDialog):
         form.addRow("Y:", self.y_input)
         
         self.width_input = QSpinBox()
-        self.width_input.setRange(100, 10000)
+        self.width_input.setRange(1, 10000)
         form.addRow("Ширина:", self.width_input)
         
         self.height_input = QSpinBox()
-        self.height_input.setRange(100, 10000)
+        self.height_input.setRange(1, 10000)
         form.addRow("Высота:", self.height_input)
         
         self.desc_input = QLineEdit()
@@ -1471,11 +1475,11 @@ class ScreenshotPresetDialog(QDialog):
         form.addRow("Y:", self.y_input)
         
         self.width_input = QSpinBox()
-        self.width_input.setRange(100, 10000)
+        self.width_input.setRange(1, 10000)
         form.addRow("Ширина:", self.width_input)
         
         self.height_input = QSpinBox()
-        self.height_input.setRange(100, 10000)
+        self.height_input.setRange(1, 10000)
         form.addRow("Высота:", self.height_input)
         
         # Кнопка предпросмотра области
@@ -1687,6 +1691,236 @@ class ScreenshotPresetDialog(QDialog):
         }
 
 
+class CVRecognitionWidget(QWidget):
+    """Виджет для CV распознавания областей на экране по пресетам изображений."""
+    
+    def __init__(self, 
+                 preset_storage: ScreenshotPresetStorage,
+                 cv_matcher: CVMatcher):
+        super().__init__()
+        self.preset_storage = preset_storage
+        self.cv_matcher = cv_matcher
+        self._setup_ui()
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(ModernStyle.SPACING)
+        layout.setContentsMargins(ModernStyle.PADDING, ModernStyle.PADDING,
+                                   ModernStyle.PADDING, ModernStyle.PADDING)
+        
+        # Заголовок
+        title = QLabel("🔍 CV Распознавание областей")
+        title.setObjectName("titleLabel")
+        layout.addWidget(title)
+        
+        # Описание
+        description = QLabel(
+            "Дважды кликните на пресет для поиска области на экране, совпадающей с изображением.\n"
+            "Найденная область будет подсвечена белой рамкой на черном фоне."
+        )
+        description.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY}; font-size: 13px;")
+        layout.addWidget(description)
+        
+        # Настройки уверенности
+        settings_card = QFrame()
+        settings_card.setObjectName("card")
+        settings_layout = QVBoxLayout(settings_card)
+        
+        settings_title = QLabel("⚙️ Настройки распознавания")
+        settings_title.setObjectName("sectionTitle")
+        settings_layout.addWidget(settings_title)
+        
+        confidence_layout = QHBoxLayout()
+        confidence_label = QLabel("Порог уверенности:")
+        self.confidence_input = QDoubleSpinBox()
+        self.confidence_input.setRange(0.1, 1.0)
+        self.confidence_input.setSingleStep(0.05)
+        self.confidence_input.setValue(self.cv_matcher._confidence_threshold)
+        self.confidence_input.setToolTip("Минимальная уверенность для совпадения (0.1 - 1.0)")
+        confidence_layout.addWidget(confidence_label)
+        confidence_layout.addWidget(self.confidence_input)
+        confidence_layout.addStretch()
+        settings_layout.addLayout(confidence_layout)
+        
+        layout.addWidget(settings_card)
+        
+        # Поиск пресетов
+        search_layout = QHBoxLayout()
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("🔍 Поиск пресетов изображений...")
+        self.search_input.textChanged.connect(self._search_presets)
+        search_layout.addWidget(self.search_input)
+        layout.addLayout(search_layout)
+        
+        # Таблица пресетов
+        self.presets_table = QTableWidget()
+        self.presets_table.setColumnCount(4)
+        self.presets_table.setHorizontalHeaderLabels([
+            "Имя", "ID", "Размер изображения", "Описание"
+        ])
+        self.presets_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.Stretch
+        )
+        self.presets_table.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.presets_table.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
+        self.presets_table.cellDoubleClicked.connect(self._on_preset_double_clicked)
+        layout.addWidget(self.presets_table)
+        
+        # Кнопки действий
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(12)
+        
+        self.find_btn = QPushButton("🔍 Найти область")
+        self.find_btn.clicked.connect(self._find_area)
+        buttons_layout.addWidget(self.find_btn)
+        
+        self.refresh_btn = QPushButton("🔄 Обновить список")
+        self.refresh_btn.setObjectName("secondaryBtn")
+        self.refresh_btn.clicked.connect(self._load_presets)
+        buttons_layout.addWidget(self.refresh_btn)
+        
+        buttons_layout.addStretch()
+        layout.addLayout(buttons_layout)
+        
+        # Статус
+        self.status_label = QLabel("")
+        self.status_label.setObjectName("fieldLabel")
+        layout.addWidget(self.status_label)
+        
+        # Загружаем пресеты
+        self._load_presets()
+    
+    def _load_presets(self):
+        """Загружает пресеты в таблицу."""
+        self.presets_table.setRowCount(0)
+        presets = self.preset_storage.get_all_presets()
+        
+        for preset in presets:
+            # Проверяем, существует ли файл скриншота
+            screenshot_path = Path(preset.screenshot_path)
+            if not screenshot_path.exists():
+                continue
+            
+            row = self.presets_table.rowCount()
+            self.presets_table.insertRow(row)
+            
+            item = QTableWidgetItem(preset.name)
+            item.setData(Qt.ItemDataRole.UserRole, preset.id)
+            self.presets_table.setItem(row, 0, item)
+            
+            self.presets_table.setItem(row, 1, QTableWidgetItem(preset.id))
+            
+            # Получаем размеры изображения
+            try:
+                from PIL import Image
+                with Image.open(screenshot_path) as img:
+                    size_text = f"{img.width} x {img.height}"
+            except Exception:
+                size_text = "Неизвестно"
+            self.presets_table.setItem(row, 2, QTableWidgetItem(size_text))
+            
+            self.presets_table.setItem(row, 3, QTableWidgetItem(preset.description or ""))
+    
+    def _search_presets(self, text: str):
+        """Ищет пресеты."""
+        self.presets_table.setRowCount(0)
+        presets = self.preset_storage.search_presets(text)
+        
+        for preset in presets:
+            screenshot_path = Path(preset.screenshot_path)
+            if not screenshot_path.exists():
+                continue
+            
+            row = self.presets_table.rowCount()
+            self.presets_table.insertRow(row)
+            
+            item = QTableWidgetItem(preset.name)
+            item.setData(Qt.ItemDataRole.UserRole, preset.id)
+            self.presets_table.setItem(row, 0, item)
+            
+            self.presets_table.setItem(row, 1, QTableWidgetItem(preset.id))
+            
+            try:
+                from PIL import Image
+                with Image.open(screenshot_path) as img:
+                    size_text = f"{img.width} x {img.height}"
+            except Exception:
+                size_text = "Неизвестно"
+            self.presets_table.setItem(row, 2, QTableWidgetItem(size_text))
+            
+            self.presets_table.setItem(row, 3, QTableWidgetItem(preset.description or ""))
+    
+    def _get_selected_preset(self) -> ScreenshotPreset | None:
+        """Получает выбранный пресет."""
+        selected_rows = self.presets_table.selectedItems()
+        if not selected_rows:
+            return None
+        
+        row = selected_rows[0].row()
+        preset_id = self.presets_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
+        return self.preset_storage.get_preset(preset_id)
+    
+    def _on_preset_double_clicked(self, row: int, column: int):
+        """Обработчик двойного клика по пресету."""
+        self._find_area()
+    
+    def _find_area(self):
+        """Ищет область на экране по выбранному пресету."""
+        preset = self._get_selected_preset()
+        if not preset:
+            QMessageBox.warning(self, "Предупреждение", "Выберите пресет!")
+            return
+        
+        screenshot_path = Path(preset.screenshot_path)
+        if not screenshot_path.exists():
+            QMessageBox.warning(
+                self, "Ошибка",
+                f"Файл скриншота не найден: {preset.screenshot_path}"
+            )
+            return
+        
+        # Получаем порог уверенности из настроек
+        confidence_threshold = self.confidence_input.value()
+        
+        self.status_label.setText(f"🔄 Поиск области для '{preset.name}'...")
+        self.repaint()
+        
+        try:
+            result = self.cv_matcher.find_match(
+                preset_image_path=str(screenshot_path),
+                preset_id=preset.id,
+                preset_name=preset.name,
+                confidence_threshold=confidence_threshold,
+            )
+            
+            if result:
+                self.status_label.setText(
+                    f"✅ Найдено! Уверенность: {result.confidence:.1%} "
+                    f"(X: {result.x}, Y: {result.y})"
+                )
+                # Показываем превью с белой рамкой
+                self.cv_matcher.preview_match(result)
+            else:
+                self.status_label.setText(
+                    f"❌ Совпадение не найдено (порог: {confidence_threshold:.0%})"
+                )
+                QMessageBox.information(
+                    self, "Результат",
+                    f"Совпадение не найдено с уверенностью выше {confidence_threshold:.0%}.\n"
+                    "Попробуйте снизить порог уверенности или обновить пресет."
+                )
+        except RuntimeError as e:
+            self.status_label.setText(f"❌ Ошибка: {e}")
+            QMessageBox.critical(self, "Ошибка", str(e))
+        except Exception as e:
+            self.status_label.setText(f"❌ Ошибка: {e}")
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка: {e}")
+
+
 class MainWindow(QMainWindow):
     """Главное окно приложения Automizer с боковой панелью навигации."""
     
@@ -1746,6 +1980,10 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.btn_screenshot_presets)
         self.nav_buttons.append(self.btn_screenshot_presets)
         
+        self.btn_cv_recognition = SidebarButton("🔍", "CV Распознавание")
+        sidebar_layout.addWidget(self.btn_cv_recognition)
+        self.nav_buttons.append(self.btn_cv_recognition)
+        
         sidebar_layout.addStretch()
         
         # Добавляем боковую панель в основной макет
@@ -1770,11 +2008,20 @@ class MainWindow(QMainWindow):
         )
         self.content_stack.addWidget(self.screenshot_presets)
         
+        # Вкладка 3: CV распознавание
+        self.cv_matcher = CVMatcher()
+        self.cv_recognition = CVRecognitionWidget(
+            self.screenshot_preset_storage,
+            self.cv_matcher
+        )
+        self.content_stack.addWidget(self.cv_recognition)
+        
         main_layout.addWidget(self.content_stack)
         
         # Подключаем кнопки навигации
         self.btn_window_selection.clicked.connect(lambda: self._switch_tab(0))
         self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(1))
+        self.btn_cv_recognition.clicked.connect(lambda: self._switch_tab(2))
     
     def _switch_tab(self, index: int):
         """Переключает вкладку и обновляет состояние кнопок."""
