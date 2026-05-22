@@ -1,1 +1,4 @@
-(src/ui/main_window.py)
+```
+__pycache__/
+*.pyc
+```

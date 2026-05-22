@@ -228,6 +228,14 @@ def apply_modern_style(widget):
             margin-bottom: 10px;
         }}
         
+        QLabel#fieldLabel {{
+            font-size: 11px;
+            color: {ModernStyle.TEXT_SECONDARY};
+            font-weight: normal;
+            margin: 0;
+            padding: 2px 4px;
+        }}
+        
         QFrame#card {{
             background-color: {ModernStyle.BG_SECONDARY};
             border-radius: {ModernStyle.BORDER_RADIUS}px;
@@ -281,9 +289,10 @@ class WindowSelectionWidget(QWidget):
     
     window_selected = pyqtSignal(WindowInfo)
     
-    def __init__(self, normalizer: ProcessNormalizer):
+    def __init__(self, normalizer: ProcessNormalizer, storage: PresetStorage | None = None):
         super().__init__()
         self.normalizer = normalizer
+        self.storage = storage or PresetStorage()
         self.current_window: WindowInfo | None = None
         self._setup_ui()
     
@@ -339,8 +348,8 @@ class WindowSelectionWidget(QWidget):
         settings_layout.addWidget(settings_title)
         
         # Поля ввода координат
-        coords_layout = QGridLayout()
-        coords_layout.setSpacing(12)
+        coords_grid = QGridLayout()
+        coords_grid.setSpacing(8)
         
         self.x_input = QSpinBox()
         self.x_input.setRange(-10000, 10000)
@@ -351,16 +360,26 @@ class WindowSelectionWidget(QWidget):
         self.height_input = QSpinBox()
         self.height_input.setRange(100, 10000)
         
-        coords_layout.addWidget(QLabel("X:"), 0, 0)
-        coords_layout.addWidget(self.x_input, 0, 1)
-        coords_layout.addWidget(QLabel("Y:"), 0, 2)
-        coords_layout.addWidget(self.y_input, 0, 3)
-        coords_layout.addWidget(QLabel("Ширина:"), 1, 0)
-        coords_layout.addWidget(self.width_input, 1, 1)
-        coords_layout.addWidget(QLabel("Высота:"), 1, 2)
-        coords_layout.addWidget(self.height_input, 1, 3)
+        # Лейблы над полями (небольшие надписи)
+        x_label = QLabel("X")
+        x_label.setObjectName("fieldLabel")
+        y_label = QLabel("Y")
+        y_label.setObjectName("fieldLabel")
+        width_label = QLabel("Ширина")
+        width_label.setObjectName("fieldLabel")
+        height_label = QLabel("Высота")
+        height_label.setObjectName("fieldLabel")
         
-        settings_layout.addLayout(coords_layout)
+        coords_grid.addWidget(x_label, 0, 0)
+        coords_grid.addWidget(self.x_input, 1, 0)
+        coords_grid.addWidget(y_label, 0, 1)
+        coords_grid.addWidget(self.y_input, 1, 1)
+        coords_grid.addWidget(width_label, 0, 2)
+        coords_grid.addWidget(self.width_input, 1, 2)
+        coords_grid.addWidget(height_label, 0, 3)
+        coords_grid.addWidget(self.height_input, 1, 3)
+        
+        settings_layout.addLayout(coords_grid)
         
         # Кнопки действий
         buttons_layout = QHBoxLayout()
@@ -377,6 +396,12 @@ class WindowSelectionWidget(QWidget):
         self.focus_btn.clicked.connect(self._focus_window)
         self.focus_btn.setEnabled(False)
         buttons_layout.addWidget(self.focus_btn)
+        
+        self.save_preset_btn = QPushButton("💾 Сохранить как пресет")
+        self.save_preset_btn.setObjectName("secondaryBtn")
+        self.save_preset_btn.clicked.connect(self._save_as_preset)
+        self.save_preset_btn.setEnabled(False)
+        buttons_layout.addWidget(self.save_preset_btn)
         
         buttons_layout.addStretch()
         settings_layout.addLayout(buttons_layout)
@@ -421,6 +446,7 @@ class WindowSelectionWidget(QWidget):
             self.current_window = None
             self.apply_btn.setEnabled(False)
             self.focus_btn.setEnabled(False)
+            self.save_preset_btn.setEnabled(False)
             return
         
         row = selected_rows[0].row()
@@ -437,6 +463,7 @@ class WindowSelectionWidget(QWidget):
             self.height_input.setValue(self.current_window.height)
             self.apply_btn.setEnabled(True)
             self.focus_btn.setEnabled(True)
+            self.save_preset_btn.setEnabled(True)
             self.window_selected.emit(self.current_window)
     
     def _apply_preset(self, preset_name: str):
@@ -492,6 +519,53 @@ class WindowSelectionWidget(QWidget):
             return
         
         self.normalizer.window_manager.focus_window(self.current_window.window_id)
+    
+    def _save_as_preset(self):
+        """Сохраняет текущие настройки как пресет."""
+        if not self.current_window:
+            QMessageBox.warning(self, "Предупреждение", "Сначала выберите окно!")
+            return
+        
+        # Создаем диалог для ввода данных пресета
+        dialog = PresetDialog(self, "💾 Сохранить пресет")
+        
+        # Предзаполняем X, Y, ширину и высоту из полей
+        dialog.x_input.setValue(self.x_input.value())
+        dialog.y_input.setValue(self.y_input.value())
+        dialog.width_input.setValue(self.width_input.value())
+        dialog.height_input.setValue(self.height_input.value())
+        
+        # Предзаполняем имя процесса из текущего окна
+        if self.current_window and self.current_window.title:
+            dialog.process_input.setText(self.current_window.title[:30])
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            data = dialog.get_data()
+            
+            # Проверяем заполненность обязательных полей
+            if not data["name"] or not data["process_name"]:
+                QMessageBox.warning(self, "Предупреждение", 
+                    "Имя и процесс являются обязательными полями!")
+                return
+            
+            # Генерируем ID из имени
+            preset_id = data["name"].lower().replace(" ", "_").replace("/", "_")
+            
+            try:
+                self.storage.add_preset(
+                    preset_id=preset_id,
+                    name=data["name"],
+                    process_name=data["process_name"],
+                    x=data["x"],
+                    y=data["y"],
+                    width=data["width"],
+                    height=data["height"],
+                    description=data["description"],
+                )
+                QMessageBox.information(self, "Успех", 
+                    f"Пресет '{data['name']}' успешно сохранен!")
+            except ValueError as e:
+                QMessageBox.critical(self, "Ошибка", str(e))
 
 
 class ProcessPresetsWidget(QWidget):
@@ -1362,7 +1436,9 @@ class MainWindow(QMainWindow):
         self.content_stack.setContentsMargins(0, 0, 0, 0)
         
         # Вкладка 1: Выбор процесса
-        self.window_selection = WindowSelectionWidget(self.normalizer)
+        self.window_selection = WindowSelectionWidget(
+            self.normalizer, self.preset_storage
+        )
         self.content_stack.addWidget(self.window_selection)
         
         # Вкладка 2: Пресеты процессов
