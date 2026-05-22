@@ -249,8 +249,9 @@ class ProcessSelectorFrame(ttk.LabelFrame):
 class PositionSizeFrame(ttk.LabelFrame):
     """Фрейм для указания положения и размеров."""
 
-    def __init__(self, parent):
+    def __init__(self, parent, on_save_preset=None):
         super().__init__(parent, text="📐 Положение и размер")
+        self.on_save_preset = on_save_preset
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -258,29 +259,41 @@ class PositionSizeFrame(ttk.LabelFrame):
         coord_frame = ttk.Frame(self)
         coord_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Label(coord_frame, text="X:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
+        # X
+        x_label_frame = ttk.Frame(coord_frame)
+        x_label_frame.grid(row=0, column=0, padx=(0, 5), sticky=tk.W)
+        ttk.Label(x_label_frame, text="X", font=("Segoe UI", 9)).pack()
         self.x_var = tk.StringVar(value="0")
         self.x_entry = ttk.Entry(coord_frame, textvariable=self.x_var, width=10)
-        self.x_entry.grid(row=0, column=1, padx=(0, 15), sticky=tk.W)
+        self.x_entry.grid(row=1, column=0, padx=(0, 5), sticky=tk.W)
 
-        ttk.Label(coord_frame, text="Y:").grid(row=0, column=2, padx=(0, 5), sticky=tk.E)
+        # Y
+        y_label_frame = ttk.Frame(coord_frame)
+        y_label_frame.grid(row=0, column=1, padx=(0, 15), sticky=tk.W)
+        ttk.Label(y_label_frame, text="Y", font=("Segoe UI", 9)).pack()
         self.y_var = tk.StringVar(value="0")
         self.y_entry = ttk.Entry(coord_frame, textvariable=self.y_var, width=10)
-        self.y_entry.grid(row=0, column=3, padx=(0, 15), sticky=tk.W)
+        self.y_entry.grid(row=1, column=1, padx=(0, 15), sticky=tk.W)
 
         # Размеры
         size_frame = ttk.Frame(self)
         size_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Label(size_frame, text="Ширина:").grid(row=0, column=0, padx=(0, 5), sticky=tk.E)
+        # Ширина
+        width_label_frame = ttk.Frame(size_frame)
+        width_label_frame.grid(row=0, column=0, padx=(0, 5), sticky=tk.W)
+        ttk.Label(width_label_frame, text="Ширина", font=("Segoe UI", 9)).pack()
         self.width_var = tk.StringVar(value="800")
         self.width_entry = ttk.Entry(size_frame, textvariable=self.width_var, width=10)
-        self.width_entry.grid(row=0, column=1, padx=(0, 15), sticky=tk.W)
+        self.width_entry.grid(row=1, column=0, padx=(0, 15), sticky=tk.W)
 
-        ttk.Label(size_frame, text="Высота:").grid(row=0, column=2, padx=(0, 5), sticky=tk.E)
+        # Высота
+        height_label_frame = ttk.Frame(size_frame)
+        height_label_frame.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
+        ttk.Label(height_label_frame, text="Высота", font=("Segoe UI", 9)).pack()
         self.height_var = tk.StringVar(value="600")
         self.height_entry = ttk.Entry(size_frame, textvariable=self.height_var, width=10)
-        self.height_entry.grid(row=0, column=3, padx=(0, 15), sticky=tk.W)
+        self.height_entry.grid(row=1, column=1, padx=(0, 15), sticky=tk.W)
 
         # Кнопки предустановок
         preset_frame = ttk.Frame(self)
@@ -292,6 +305,10 @@ class PositionSizeFrame(ttk.LabelFrame):
         ttk.Button(preset_frame, text="¼ ↗", command=self._set_quarter_top_right).pack(side=tk.LEFT, padx=3, pady=3)
         ttk.Button(preset_frame, text="¼ ↙", command=self._set_quarter_bottom_left).pack(side=tk.LEFT, padx=3, pady=3)
         ttk.Button(preset_frame, text="¼ ↘", command=self._set_quarter_bottom_right).pack(side=tk.LEFT, padx=3, pady=3)
+
+        # Кнопка сохранения пресета
+        save_preset_btn = ttk.Button(preset_frame, text="💾 Сохранить пресет", command=self._on_save_preset)
+        save_preset_btn.pack(side=tk.RIGHT, padx=10, pady=3)
 
     def _get_screen_size(self) -> tuple[int, int]:
         root = tk.Tk()
@@ -355,6 +372,12 @@ class PositionSizeFrame(ttk.LabelFrame):
         self.y_var.set(str(window.y))
         self.width_var.set(str(window.width))
         self.height_var.set(str(window.height))
+
+    def _on_save_preset(self) -> None:
+        """Обработчик кнопки сохранения пресета."""
+        if self.on_save_preset:
+            x, y, width, height = self.get_values()
+            self.on_save_preset(x, y, width, height)
 
 
 class ScreenAreaSelector(tk.Toplevel):
@@ -2011,7 +2034,7 @@ class NormalizerApp(ttk.Frame):
         right_frame = ttk.Frame(top_frame)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        self.position_size_frame = PositionSizeFrame(right_frame)
+        self.position_size_frame = PositionSizeFrame(right_frame, on_save_preset=self._on_save_preset_from_position)
         self.position_size_frame.pack(fill=tk.X, pady=(0, 15))
 
         # Кнопки действий
@@ -2020,6 +2043,45 @@ class NormalizerApp(ttk.Frame):
 
         ttk.Button(action_frame, text="✅ Нормализовать окно", command=self._normalize_window).pack(fill=tk.X, pady=3)
         ttk.Button(action_frame, text="💾 Сохранить как пресет", command=self._save_as_preset).pack(fill=tk.X, pady=3)
+
+    def _on_save_preset_from_position(self, x: int, y: int, width: int, height: int) -> None:
+        """Обработчик кнопки сохранения пресета из окна позиции/размера."""
+        window = self.process_selector.get_selected_window()
+        if window is None:
+            messagebox.showwarning("⚠️ Предупреждение", "Выберите окно для создания пресета")
+            return
+
+        # Передаем текущие параметры окна в диалог
+        prefill_data = {
+            "name": window.title[:30] + "..." if len(window.title) > 30 else window.title,
+            "process_name": window.title,
+            "x": x,
+            "y": y,
+            "width": width,
+            "height": height,
+            "description": "",
+        }
+
+        dialog = EditPresetDialog(self, prefill_data=prefill_data)
+        if dialog.result:
+            preset_id = f"preset_{len(self.storage.get_all_presets()) + 1}"
+            try:
+                self.storage.add_preset(
+                    preset_id=preset_id,
+                    name=dialog.result["name"],
+                    process_name=dialog.result["process_name"],
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                    description=dialog.result["description"],
+                )
+                self.preset_manager._refresh_presets()
+                messagebox.showinfo("✅ Успех", "Пресет сохранен!")
+                # Переключаемся на вкладку с пресетами
+                self.notebook.select(1)
+            except ValueError as e:
+                messagebox.showerror("❌ Ошибка", str(e))
 
     def _setup_tab2(self, parent) -> None:
         """Настройка второй вкладки - управление пресетами."""
