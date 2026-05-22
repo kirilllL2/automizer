@@ -1481,7 +1481,8 @@ class ScreenshotPresetsWidget(QWidget):
     def _add_preset(self):
         """Добавляет новый пресет скриншота."""
         dialog = ScreenshotPresetDialog(
-            self, "Добавление пресета скриншота", self.process_storage
+            self, "Добавление пресета скриншота", self.process_storage,
+            screenshot_manager=self.screenshot_manager
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
@@ -1501,7 +1502,8 @@ class ScreenshotPresetsWidget(QWidget):
             return
         
         dialog = ScreenshotPresetDialog(
-            self, "Редактирование пресета скриншота", self.process_storage, preset
+            self, "Редактирование пресета скриншота", self.process_storage, preset,
+            screenshot_manager=self.screenshot_manager
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
@@ -1618,12 +1620,14 @@ class ScreenshotPresetDialog(QDialog):
     
     def __init__(self, parent=None, title: str = "", 
                  process_storage: PresetStorage | None = None,
-                 preset: ScreenshotPreset | None = None):
+                 preset: ScreenshotPreset | None = None,
+                 screenshot_manager=None):
         super().__init__(parent)
         self.setWindowTitle(title)
         self.setMinimumWidth(450)
         self.process_storage = process_storage
         self.preset = preset
+        self.screenshot_manager = screenshot_manager
         self._setup_ui()
         
         if preset:
@@ -1794,12 +1798,14 @@ class ScreenshotPresetDialog(QDialog):
             global_y = target_window.y + y
             
             # Показываем превью с глобальными координатами
-            self.parent().parent().screenshot_manager.preview_area(
-                global_x, global_y, width, height
-            )
+            if self.screenshot_manager:
+                self.screenshot_manager.preview_area(
+                    global_x, global_y, width, height
+                )
         else:
             # Для глобальных координат показываем напрямую
-            self.parent().parent().screenshot_manager.preview_area(x, y, width, height)
+            if self.screenshot_manager:
+                self.screenshot_manager.preview_area(x, y, width, height)
     
     def _fill_data(self, preset: ScreenshotPreset):
         """Заполняет форму данными пресета."""
