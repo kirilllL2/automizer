@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QScrollArea, QGridLayout, QSpacerItem,
     QSizePolicy, QMessageBox, QFileDialog, QDialog, QDialogButtonBox,
-    QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect
+    QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect, QCheckBox
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
@@ -1539,10 +1539,29 @@ class ScreenshotPresetsWidget(QWidget):
         if not preset:
             return
         
+        # Для относительных координат нужно найти окно процесса и передать window_manager
+        window_manager = None
+        if preset.use_relative_coords and preset.process_preset_id:
+            # Находим окно по пресету процесса
+            process_preset = self.process_storage.get_preset(preset.process_preset_id)
+            if process_preset:
+                # Ищем окно с помощью normalizer
+                windows = self.normalizer.search_windows(process_preset.process_name)
+                if windows:
+                    # Получаем window_id из первого найденного окна
+                    window_info = self.normalizer.window_manager.get_windows()
+                    for win in window_info:
+                        if process_preset.process_name.lower() in win.title.lower():
+                            # Обновляем window_id в пресете для захвата
+                            preset.window_id = win.window_id
+                            break
+                    window_manager = self.normalizer.window_manager
+        
         # Используем capture_with_preset для сохранения по пути из пресета
         self.preset_storage.capture_with_preset(
             preset=preset,
             screenshot_manager=self.screenshot_manager,
+            window_manager=window_manager,
         )
         QMessageBox.information(self, "Успех", f"Скриншот сохранен в: {preset.screenshot_path}")
     
@@ -1576,9 +1595,19 @@ class ScreenshotPresetsWidget(QWidget):
             QMessageBox.critical(self, "Ошибка", "Пресет скриншота не найден!")
             return
         
+        # Для относительных координат обновляем window_id из текущего окна
+        if screenshot_preset.use_relative_coords:
+            # Ищем окно после применения пресета
+            windows = self.normalizer.window_manager.get_windows()
+            for win in windows:
+                if process_preset.process_name.lower() in win.title.lower():
+                    screenshot_preset.window_id = win.window_id
+                    break
+        
         self.preset_storage.capture_with_preset(
             preset=screenshot_preset,
             screenshot_manager=self.screenshot_manager,
+            window_manager=self.normalizer.window_manager if screenshot_preset.use_relative_coords else None,
         )
         
         QMessageBox.information(self, "Успех", f"Полный захват выполнен! Скриншот сохранен в: {screenshot_preset.screenshot_path}")
@@ -1617,7 +1646,19 @@ class ScreenshotPresetDialog(QDialog):
         if self.process_storage:
             for p in self.process_storage.get_all_presets():
                 self.process_combo.addItem(p.name, p.id)
+        self.process_combo.currentIndexChanged.connect(self._on_process_selected)
         form.addRow("Пресет процесса:", self.process_combo)
+        
+        # Переключатель типа координат
+        self.relative_coords_checkbox = QCheckBox("Использовать относительные координаты окна")
+        self.relative_coords_checkbox.setToolTip(
+            "Если отмечено, координаты будут относительными для окна процесса.\n"
+            "Скриншот можно делать даже если окно не активно или за другими окнами."
+        )
+        self.relative_coords_checkbox.stateChanged.connect(self._on_coord_type_changed)
+        # Изначально отключаем чекбокс, пока не выбран пресет процесса
+        self.relative_coords_checkbox.setEnabled(False)
+        form.addRow("", self.relative_coords_checkbox)
         
         self.x_input = QSpinBox()
         self.x_input.setRange(-10000, 10000)
@@ -1634,6 +1675,13 @@ class ScreenshotPresetDialog(QDialog):
         self.height_input = QSpinBox()
         self.height_input.setRange(100, 10000)
         form.addRow("Высота:", self.height_input)
+        
+        # Кнопка предпросмотра области
+        self.preview_btn = QPushButton("👁️ Показать область скриншота")
+        self.preview_btn.setObjectName("secondaryBtn")
+        self.preview_btn.clicked.connect(self._preview_screenshot_area)
+        self.preview_btn.setToolTip("Показать область, которая будет захвачена")
+        form.addRow("", self.preview_btn)
         
         self.path_input = QLineEdit()
         self.path_input.setPlaceholderText("Путь сохранения (опционально)")
@@ -1653,16 +1701,134 @@ class ScreenshotPresetDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
     
+    def _on_coord_type_changed(self, state):
+        """Обработчик изменения типа координат."""
+        is_relative = self.relative_coords_checkbox.isChecked()
+        process_preset_id = self.process_combo.currentData()
+        
+        # Если пресет процесса не выбран, принудительно устанавливаем глобальные координаты
+        if not process_preset_id:
+            self.relative_coords_checkbox.setChecked(False)
+            self.relative_coords_checkbox.setEnabled(False)
+            QMessageBox.information(
+                self, "Информация",
+                "Относительные координаты доступны только при выборе пресета процесса.\n"
+                "Без пресета процесса будут использоваться глобальные координаты экрана."
+            )
+            self.x_input.setToolTip("Глобальная координата X на экране")
+            self.y_input.setToolTip("Глобальная координата Y на экране")
+        else:
+            self.relative_coords_checkbox.setEnabled(True)
+            if is_relative:
+                self.x_input.setToolTip("Относительная координата X внутри окна (0 = левый край окна)")
+                self.y_input.setToolTip("Относительная координата Y внутри окна (0 = верхний край окна)")
+            else:
+                self.x_input.setToolTip("Глобальная координата X на экране")
+                self.y_input.setToolTip("Глобальная координата Y на экране")
+    
+    def _on_process_selected(self, index):
+        """Обработчик выбора пресета процесса."""
+        process_preset_id = self.process_combo.currentData()
+        
+        # Автоматически включаем относительные координаты если выбран пресет процесса
+        if process_preset_id:
+            self.relative_coords_checkbox.setChecked(True)
+            self.relative_coords_checkbox.setEnabled(True)
+            self.x_input.setToolTip("Относительная координата X внутри окна (0 = левый край окна)")
+            self.y_input.setToolTip("Относительная координата Y внутри окна (0 = верхний край окна)")
+        else:
+            self.relative_coords_checkbox.setChecked(False)
+            self.relative_coords_checkbox.setEnabled(False)
+            self.x_input.setToolTip("Глобальная координата X на экране")
+            self.y_input.setToolTip("Глобальная координата Y на экране")
+    
+    def _preview_screenshot_area(self):
+        """Показывает область скриншота."""
+        x = self.x_input.value()
+        y = self.y_input.value()
+        width = self.width_input.value()
+        height = self.height_input.value()
+        is_relative = self.relative_coords_checkbox.isChecked()
+        
+        if is_relative:
+            # Для относительных координат нужно найти окно процесса
+            process_preset_id = self.process_combo.currentData()
+            if not process_preset_id:
+                QMessageBox.warning(
+                    self, "Предупреждение",
+                    "Для предпросмотра относительных координат выберите пресет процесса!"
+                )
+                return
+            
+            # Получаем пресет процесса и находим окно
+            from src.normalizer import ProcessNormalizer
+            from src.window_manager import WindowManager
+            
+            window_manager = WindowManager()
+            normalizer = ProcessNormalizer(window_manager)
+            
+            # Ищем окно по имени процесса из пресета
+            process_preset = self.process_storage.get_preset(process_preset_id)
+            if not process_preset:
+                QMessageBox.warning(self, "Ошибка", "Пресет процесса не найден!")
+                return
+            
+            # Находим окно по имени процесса
+            windows = window_manager.get_windows()
+            target_window = None
+            for window in windows:
+                if process_preset.process_name.lower() in window.title.lower():
+                    target_window = window
+                    break
+            
+            if not target_window:
+                QMessageBox.warning(
+                    self, "Предупреждение",
+                    f"Окно процесса '{process_preset.process_name}' не найдено!\n"
+                    "Запустите приложение для предпросмотра."
+                )
+                return
+            
+            # Конвертируем относительные координаты в глобальные
+            global_x = target_window.x + x
+            global_y = target_window.y + y
+            
+            # Показываем превью с глобальными координатами
+            self.parent().parent().screenshot_manager.preview_area(
+                global_x, global_y, width, height
+            )
+        else:
+            # Для глобальных координат показываем напрямую
+            self.parent().parent().screenshot_manager.preview_area(x, y, width, height)
+    
     def _fill_data(self, preset: ScreenshotPreset):
         """Заполняет форму данными пресета."""
         self.name_input.setText(preset.name)
-        self.process_combo.setCurrentText(preset.process_preset_id)
+        
+        # Устанавливаем пресет процесса по ID
+        process_preset_id = preset.process_preset_id
+        index = self.process_combo.findData(process_preset_id)
+        if index >= 0:
+            self.process_combo.setCurrentIndex(index)
+        else:
+            # Если пресет процесса не найден, оставляем пустым
+            self.process_combo.setCurrentIndex(0)
+        
         self.x_input.setValue(preset.x)
         self.y_input.setValue(preset.y)
         self.width_input.setValue(preset.width)
         self.height_input.setValue(preset.height)
         self.path_input.setText(preset.screenshot_path)
         self.desc_input.setText(preset.description)
+        # Устанавливаем состояние чекбокса относительных координат
+        # Важно: сначала устанавливаем значение, чтобы триггернуть обновление tooltip
+        self.relative_coords_checkbox.blockSignals(True)
+        self.relative_coords_checkbox.setChecked(preset.use_relative_coords)
+        self.relative_coords_checkbox.blockSignals(False)
+        # Обновляем enabled state и tooltip в соответствии с наличием process_preset_id
+        has_process_preset = self.process_combo.currentData() != ""
+        self.relative_coords_checkbox.setEnabled(has_process_preset)
+        self._on_coord_type_changed(0)  # Обновляем tooltip
     
     def get_data(self) -> dict:
         """Возвращает данные из формы."""
@@ -1678,15 +1844,23 @@ class ScreenshotPresetDialog(QDialog):
         elif not screenshot_path.endswith('.png'):
             screenshot_path = f"{screenshot_path}.png"
         
+        process_preset_id = self.process_combo.currentData()
+        use_relative_coords = self.relative_coords_checkbox.isChecked()
+        
+        # Если пресет процесса не выбран, используем глобальные координаты
+        if not process_preset_id:
+            use_relative_coords = False
+        
         return {
             "name": name,
-            "process_preset_id": self.process_combo.currentData() or "default",
+            "process_preset_id": process_preset_id or "default",
             "x": self.x_input.value(),
             "y": self.y_input.value(),
             "width": self.width_input.value(),
             "height": self.height_input.value(),
             "screenshot_path": screenshot_path,
             "description": self.desc_input.text(),
+            "use_relative_coords": use_relative_coords,
         }
 
 
