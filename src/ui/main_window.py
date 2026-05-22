@@ -1,10 +1,9 @@
 """
 Главное окно приложения Automizer.
-Современный красивый резиновый интерфейс с 4 вкладками:
+Современный красивый резиновый интерфейс с 3 вкладками:
 1. Выбор процесса - выбор окна и настройка позиции/размеров
-2. Пресеты процессов - управление пресетами нормализации
-3. Скриншоты - управление созданными скриншотами
-4. Пресеты скриншотов - управление пресетами скриншотов и быстрый захват
+2. Скриншоты - управление созданными скриншотами
+3. Пресеты скриншотов - управление пресетами скриншотов и быстрый захват
 """
 
 from PyQt6.QtWidgets import (
@@ -380,35 +379,54 @@ class WindowSelectionWidget(QWidget):
         
         settings_layout.addLayout(coords_grid)
         
-        # Кнопки действий
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(12)
+        # Кнопки действий - группа для работы с окном
+        window_buttons_layout = QHBoxLayout()
+        window_buttons_layout.setSpacing(12)
         
         self.apply_preset_btn = QPushButton("📋 Применить пресет")
         self.apply_preset_btn.setObjectName("secondaryBtn")
         self.apply_preset_btn.clicked.connect(self._apply_preset_from_selection)
-        buttons_layout.addWidget(self.apply_preset_btn)
+        window_buttons_layout.addWidget(self.apply_preset_btn)
         
         self.apply_btn = QPushButton("✓ Применить к окну")
         self.apply_btn.setObjectName("successBtn")
         self.apply_btn.clicked.connect(self._apply_to_window)
         self.apply_btn.setEnabled(False)
-        buttons_layout.addWidget(self.apply_btn)
+        window_buttons_layout.addWidget(self.apply_btn)
         
         self.focus_btn = QPushButton("🎯 Фокус")
         self.focus_btn.setObjectName("secondaryBtn")
         self.focus_btn.clicked.connect(self._focus_window)
         self.focus_btn.setEnabled(False)
-        buttons_layout.addWidget(self.focus_btn)
+        window_buttons_layout.addWidget(self.focus_btn)
+        
+        window_buttons_layout.addStretch()
+        settings_layout.addLayout(window_buttons_layout)
+        
+        # Разделитель
+        separator = QFrame()
+        separator.setFrameShape(QFrame.Shape.HLine)
+        separator.setStyleSheet(f"background-color: {ModernStyle.BORDER};")
+        separator.setFixedHeight(2)
+        settings_layout.addWidget(separator)
+        
+        # Кнопки действий - группа для работы с пресетами
+        preset_buttons_layout = QHBoxLayout()
+        preset_buttons_layout.setSpacing(12)
         
         self.save_preset_btn = QPushButton("💾 Сохранить как пресет")
         self.save_preset_btn.setObjectName("secondaryBtn")
         self.save_preset_btn.clicked.connect(self._save_as_preset)
         self.save_preset_btn.setEnabled(False)
-        buttons_layout.addWidget(self.save_preset_btn)
+        preset_buttons_layout.addWidget(self.save_preset_btn)
         
-        buttons_layout.addStretch()
-        settings_layout.addLayout(buttons_layout)
+        self.delete_preset_btn = QPushButton("🗑️ Удалить пресет")
+        self.delete_preset_btn.setObjectName("dangerBtn")
+        self.delete_preset_btn.clicked.connect(self._delete_preset_dialog)
+        preset_buttons_layout.addWidget(self.delete_preset_btn)
+        
+        preset_buttons_layout.addStretch()
+        settings_layout.addLayout(preset_buttons_layout)
         
         layout.addWidget(settings_card)
         
@@ -803,6 +821,74 @@ class WindowSelectionWidget(QWidget):
         if preset_row < len(visible_presets):
             preset = visible_presets[preset_row]
             self._apply_preset_values(preset, apply_immediately=True)
+            dialog.accept()
+    
+    def _delete_preset_dialog(self):
+        """Показывает диалог выбора пресета для удаления."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("🗑️ Удалить пресет")
+        dialog.setMinimumWidth(400)
+        dialog.setMinimumHeight(300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        label = QLabel("Выберите пресет для удаления:")
+        layout.addWidget(label)
+        
+        # Таблица пресетов
+        preset_list = QTableWidget()
+        preset_list.setColumnCount(3)
+        preset_list.setHorizontalHeaderLabels(["Имя", "Процесс", "Описание"])
+        preset_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        preset_list.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        preset_list.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        
+        all_presets = self.storage.get_all_presets()
+        for preset in all_presets:
+            row = preset_list.rowCount()
+            preset_list.insertRow(row)
+            preset_list.setItem(row, 0, QTableWidgetItem(preset.name))
+            preset_list.setItem(row, 1, QTableWidgetItem(preset.process_name))
+            preset_list.setItem(row, 2, QTableWidgetItem(preset.description))
+        
+        layout.addWidget(preset_list)
+        
+        # Кнопки
+        buttons_layout = QHBoxLayout()
+        
+        delete_btn = QPushButton("🗑️ Удалить")
+        delete_btn.setObjectName("dangerBtn")
+        delete_btn.clicked.connect(lambda: self._confirm_delete_preset(dialog, preset_list, all_presets))
+        buttons_layout.addWidget(delete_btn)
+        
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setObjectName("secondaryBtn")
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(buttons_layout)
+        
+        dialog.exec()
+    
+    def _confirm_delete_preset(self, dialog: QDialog, preset_list: QTableWidget, presets: list[NormalizationPreset]):
+        """Подтверждает и удаляет выбранный пресет."""
+        selected_rows = preset_list.selectedItems()
+        if not selected_rows:
+            QMessageBox.warning(self, "Предупреждение", "Выберите пресет для удаления!")
+            return
+        
+        row = selected_rows[0].row()
+        preset = presets[row]
+        
+        reply = QMessageBox.question(
+            self, "Подтверждение",
+            f"Удалить пресет '{preset.name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.storage.remove_preset(preset.id)
+            QMessageBox.information(self, "Успех", f"Пресет '{preset.name}' удален!")
             dialog.accept()
 
 
@@ -1659,10 +1745,6 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.btn_window_selection)
         self.nav_buttons.append(self.btn_window_selection)
         
-        self.btn_process_presets = SidebarButton("📋", "Пресеты процессов")
-        sidebar_layout.addWidget(self.btn_process_presets)
-        self.nav_buttons.append(self.btn_process_presets)
-        
         self.btn_screenshots = SidebarButton("📸", "Скриншоты")
         sidebar_layout.addWidget(self.btn_screenshots)
         self.nav_buttons.append(self.btn_screenshots)
@@ -1686,17 +1768,11 @@ class MainWindow(QMainWindow):
         )
         self.content_stack.addWidget(self.window_selection)
         
-        # Вкладка 2: Пресеты процессов
-        self.process_presets = ProcessPresetsWidget(
-            self.preset_storage, self.normalizer
-        )
-        self.content_stack.addWidget(self.process_presets)
-        
-        # Вкладка 3: Скриншоты
+        # Вкладка 2: Скриншоты
         self.screenshots = ScreenshotsWidget(self.screenshot_manager)
         self.content_stack.addWidget(self.screenshots)
         
-        # Вкладка 4: Пресеты скриншотов
+        # Вкладка 3: Пресеты скриншотов
         self.screenshot_presets = ScreenshotPresetsWidget(
             self.screenshot_preset_storage,
             self.preset_storage,
@@ -1709,9 +1785,8 @@ class MainWindow(QMainWindow):
         
         # Подключаем кнопки навигации
         self.btn_window_selection.clicked.connect(lambda: self._switch_tab(0))
-        self.btn_process_presets.clicked.connect(lambda: self._switch_tab(1))
-        self.btn_screenshots.clicked.connect(lambda: self._switch_tab(2))
-        self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(3))
+        self.btn_screenshots.clicked.connect(lambda: self._switch_tab(1))
+        self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(2))
     
     def _switch_tab(self, index: int):
         """Переключает вкладку и обновляет состояние кнопок."""
