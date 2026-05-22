@@ -13,9 +13,9 @@ from PyQt6.QtWidgets import (
     QHeaderView, QFrame, QScrollArea, QGridLayout, QSpacerItem,
     QSizePolicy, QMessageBox, QFileDialog, QDialog, QDialogButtonBox,
     QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect,
-    QPropertyAnimation, QEasingCurve
+    QEasingCurve
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation, QPropertyAnimation
 from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
 
 from src.normalizer import ProcessNormalizer, NormalizationPreset
