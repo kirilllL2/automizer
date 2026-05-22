@@ -24,6 +24,15 @@ from src.storage import PresetStorage
 from src.screenshot import ScreenshotManager
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 from src.cv import CVMatcher, MatchResult
+from src.macros.storage import MacroStorage, Macro
+from src.macros.executor import MacroExecutor
+from src.macros import (
+    ActionType, ClickAbsoluteAction, ClickRelativeAction, ClickImageAction,
+    DelayAction, ConditionAction, LoopAction, GotoAction, StateCheckAction,
+    NormalizeWindowAction, FocusWindowAction, TakeScreenshotAction,
+    ClickOffset, ConditionBranch
+)
+import uuid
 
 
 class ModernStyle:
@@ -1691,6 +1700,1046 @@ class ScreenshotPresetDialog(QDialog):
         }
 
 
+class MacrosWidget(QWidget):
+    """Виджет для управления макросами - создание, редактирование, запуск."""
+    
+    def __init__(self, 
+                 macro_storage: MacroStorage,
+                 macro_executor: MacroExecutor,
+                 screenshot_preset_storage: ScreenshotPresetStorage,
+                 preset_storage: PresetStorage):
+        super().__init__()
+        self.macro_storage = macro_storage
+        self.macro_executor = macro_executor
+        self.screenshot_preset_storage = screenshot_preset_storage
+        self.preset_storage = preset_storage
+        self.current_macro: Macro | None = None
+        self._setup_ui()
+        self._connect_executor_signals()
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(ModernStyle.SPACING)
+        layout.setContentsMargins(ModernStyle.PADDING, ModernStyle.PADDING,
+                                   ModernStyle.PADDING, ModernStyle.PADDING)
+        
+        # Заголовок
+        title = QLabel("🎬 Макросы")
+        title.setObjectName("titleLabel")
+        layout.addWidget(title)
+        
+        # Верхняя панель со списком макросов и кнопками
+        top_layout = QHBoxLayout()
+        
+        # Список макросов
+        macros_list_card = QFrame()
+        macros_list_card.setObjectName("card")
+        macros_list_layout = QVBoxLayout(macros_list_card)
+        
+        list_header = QHBoxLayout()
+        list_title = QLabel("📋 Список макросов")
+        list_title.setObjectName("sectionTitle")
+        list_header.addWidget(list_title)
+        list_header.addStretch()
+        
+        self.new_macro_btn = QPushButton("➕ Новый")
+        self.new_macro_btn.clicked.connect(self._create_new_macro)
+        list_header.addWidget(self.new_macro_btn)
+        
+        macros_list_layout.addLayout(list_header)
+        
+        self.macros_table = QTableWidget()
+        self.macros_table.setColumnCount(3)
+        self.macros_table.setHorizontalHeaderLabels(["Название", "Описание", "Действий"])
+        self.macros_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.macros_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.macros_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.macros_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.macros_table.itemSelectionChanged.connect(self._on_macro_selected)
+        macros_list_layout.addWidget(self.macros_table)
+        
+        top_layout.addWidget(macros_list_card, stretch=1)
+        
+        # Панель редактора
+        editor_card = QFrame()
+        editor_card.setObjectName("card")
+        editor_layout = QVBoxLayout(editor_card)
+        
+        editor_title = QLabel("✏️ Редактор макроса")
+        editor_title.setObjectName("sectionTitle")
+        editor_layout.addWidget(editor_title)
+        
+        # Информация о макросе
+        info_layout = QGridLayout()
+        info_layout.setSpacing(8)
+        
+        info_layout.addWidget(QLabel("Название:"), 0, 0)
+        self.macro_name_input = QLineEdit()
+        self.macro_name_input.setPlaceholderText("Название макроса")
+        info_layout.addWidget(self.macro_name_input, 0, 1)
+        
+        info_layout.addWidget(QLabel("Описание:"), 0, 2)
+        self.macro_desc_input = QLineEdit()
+        self.macro_desc_input.setPlaceholderText("Описание макроса")
+        info_layout.addWidget(self.macro_desc_input, 0, 3)
+        
+        editor_layout.addLayout(info_layout)
+        
+        # Список действий
+        actions_title = QLabel("📝 Действия макроса")
+        actions_title.setObjectName("sectionTitle")
+        editor_layout.addWidget(actions_title)
+        
+        self.actions_table = QTableWidget()
+        self.actions_table.setColumnCount(5)
+        self.actions_table.setHorizontalHeaderLabels(["#", "Тип", "Метка (Label)", "Описание", "Включено"])
+        self.actions_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.actions_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.actions_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.actions_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.actions_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.actions_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.actions_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.actions_table.itemSelectionChanged.connect(self._on_action_selected)
+        self.actions_table.cellDoubleClicked.connect(self._edit_action)
+        editor_layout.addWidget(self.actions_table)
+        
+        # Кнопки управления действиями
+        action_buttons_layout = QHBoxLayout()
+        action_buttons_layout.setSpacing(8)
+        
+        self.add_action_btn = QPushButton("➕ Добавить действие")
+        self.add_action_btn.clicked.connect(self._add_action)
+        self.add_action_btn.setEnabled(False)
+        action_buttons_layout.addWidget(self.add_action_btn)
+        
+        self.edit_action_btn = QPushButton("✏️ Редактировать")
+        self.edit_action_btn.clicked.connect(self._edit_action)
+        self.edit_action_btn.setEnabled(False)
+        action_buttons_layout.addWidget(self.edit_action_btn)
+        
+        self.remove_action_btn = QPushButton("🗑️ Удалить")
+        self.remove_action_btn.setObjectName("dangerBtn")
+        self.remove_action_btn.clicked.connect(self._remove_action)
+        self.remove_action_btn.setEnabled(False)
+        action_buttons_layout.addWidget(self.remove_action_btn)
+        
+        self.move_up_btn = QPushButton("⬆️ Вверх")
+        self.move_up_btn.clicked.connect(self._move_action_up)
+        self.move_up_btn.setEnabled(False)
+        action_buttons_layout.addWidget(self.move_up_btn)
+        
+        self.move_down_btn = QPushButton("⬇️ Вниз")
+        self.move_down_btn.clicked.connect(self._move_action_down)
+        self.move_down_btn.setEnabled(False)
+        action_buttons_layout.addWidget(self.move_down_btn)
+        
+        action_buttons_layout.addStretch()
+        editor_layout.addLayout(action_buttons_layout)
+        
+        # Кнопки управления макросом
+        macro_buttons_layout = QHBoxLayout()
+        macro_buttons_layout.setSpacing(8)
+        
+        self.save_macro_btn = QPushButton("💾 Сохранить")
+        self.save_macro_btn.setObjectName("successBtn")
+        self.save_macro_btn.clicked.connect(self._save_macro)
+        self.save_macro_btn.setEnabled(False)
+        macro_buttons_layout.addWidget(self.save_macro_btn)
+        
+        self.run_macro_btn = QPushButton("▶️ Запустить")
+        self.run_macro_btn.clicked.connect(self._run_macro)
+        self.run_macro_btn.setEnabled(False)
+        macro_buttons_layout.addWidget(self.run_macro_btn)
+        
+        self.stop_macro_btn = QPushButton("⏹️ Остановить")
+        self.stop_macro_btn.setObjectName("dangerBtn")
+        self.stop_macro_btn.clicked.connect(self._stop_macro)
+        self.stop_macro_btn.setEnabled(False)
+        macro_buttons_layout.addWidget(self.stop_macro_btn)
+        
+        macro_buttons_layout.addStretch()
+        editor_layout.addLayout(macro_buttons_layout)
+        
+        # Статус выполнения
+        status_card = QFrame()
+        status_card.setObjectName("card")
+        status_layout = QVBoxLayout(status_card)
+        
+        status_title = QLabel("📊 Статус выполнения")
+        status_title.setObjectName("sectionTitle")
+        status_layout.addWidget(status_title)
+        
+        self.status_label = QLabel("Готов к работе")
+        self.status_label.setStyleSheet(f"font-size: 16px; color: {ModernStyle.TEXT_PRIMARY};")
+        status_layout.addWidget(self.status_label)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {ModernStyle.BG_PRIMARY};
+                border: 2px solid {ModernStyle.BORDER};
+                border-radius: 6px;
+                text-align: center;
+            }}
+            QProgressBar::chunk {{
+                background-color: {ModernStyle.ACCENT};
+                border-radius: 6px;
+            }}
+        """)
+        status_layout.addWidget(self.progress_bar)
+        
+        editor_layout.addWidget(status_card)
+        
+        top_layout.addWidget(editor_card, stretch=2)
+        
+        layout.addLayout(top_layout)
+        
+        # Загружаем список макросов
+        self._load_macros_list()
+    
+    def _connect_executor_signals(self):
+        """Подключает сигналы исполнителя макросов."""
+        self.macro_executor.on_action_start = self._on_action_start
+        self.macro_executor.on_action_complete = self._on_action_complete
+        self.macro_executor.on_action_error = self._on_action_error
+        self.macro_executor.on_macro_complete = self._on_macro_complete
+        self.macro_executor.on_macro_error = self._on_macro_error
+    
+    def _load_macros_list(self):
+        """Загружает список макросов в таблицу."""
+        self.macros_table.setRowCount(0)
+        macros = self.macro_storage.get_all_macros()
+        
+        for macro in macros:
+            row = self.macros_table.rowCount()
+            self.macros_table.insertRow(row)
+            self.macros_table.setItem(row, 0, QTableWidgetItem(macro.name))
+            self.macros_table.setItem(row, 1, QTableWidgetItem(macro.description or "-"))
+            self.macros_table.setItem(row, 2, QTableWidgetItem(str(len(macro.actions))))
+    
+    def _on_macro_selected(self):
+        """Обработчик выбора макроса в списке."""
+        selected_rows = self.macros_table.selectedItems()
+        if not selected_rows:
+            self.current_macro = None
+            self._clear_editor()
+            return
+        
+        row = selected_rows[0].row()
+        macro_id = self.macros_table.item(row, 0).text()
+        
+        # Находим макрос по имени (в реальном приложении лучше использовать ID)
+        macros = self.macro_storage.get_all_macros()
+        for macro in macros:
+            if macro.name == macro_id:
+                self.current_macro = macro
+                break
+        
+        if self.current_macro:
+            self._load_macro_into_editor()
+    
+    def _clear_editor(self):
+        """Очищает редактор."""
+        self.macro_name_input.clear()
+        self.macro_desc_input.clear()
+        self.actions_table.setRowCount(0)
+        self.add_action_btn.setEnabled(False)
+        self.edit_action_btn.setEnabled(False)
+        self.remove_action_btn.setEnabled(False)
+        self.move_up_btn.setEnabled(False)
+        self.move_down_btn.setEnabled(False)
+        self.save_macro_btn.setEnabled(False)
+        self.run_macro_btn.setEnabled(False)
+    
+    def _load_macro_into_editor(self):
+        """Загружает макрос в редактор."""
+        if not self.current_macro:
+            return
+        
+        self.macro_name_input.setText(self.current_macro.name)
+        self.macro_desc_input.setText(self.current_macro.description or "")
+        
+        self.actions_table.setRowCount(0)
+        for i, action in enumerate(self.current_macro.actions):
+            row = self.actions_table.rowCount()
+            self.actions_table.insertRow(row)
+            
+            type_name = action.type.value.replace("_", " ").title()
+            self.actions_table.setItem(row, 0, QTableWidgetItem(str(i + 1)))
+            self.actions_table.setItem(row, 1, QTableWidgetItem(type_name))
+            self.actions_table.setItem(row, 2, QTableWidgetItem(action.label or "-"))
+            self.actions_table.setItem(row, 3, QTableWidgetItem(action.description or "-"))
+            
+            enabled_item = QTableWidgetItem("✓" if action.enabled else "✗")
+            enabled_item.setFlags(enabled_item.flags() & ~Qt.ItemIsEditable)
+            self.actions_table.setItem(row, 4, enabled_item)
+        
+        self.add_action_btn.setEnabled(True)
+        self.save_macro_btn.setEnabled(True)
+        self.run_macro_btn.setEnabled(True)
+    
+    def _create_new_macro(self):
+        """Создает новый макрос."""
+        dialog = NewMacroDialog(self)
+        if dialog.exec():
+            name, description = dialog.get_data()
+            macro_id = str(uuid.uuid4())[:8]
+            
+            try:
+                macro = self.macro_storage.create_macro(macro_id, name, description)
+                self.current_macro = macro
+                self._load_macros_list()
+                self._load_macro_into_editor()
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка", f"Не удалось создать макрос: {e}")
+    
+    def _add_action(self):
+        """Добавляет новое действие."""
+        if not self.current_macro:
+            return
+        
+        dialog = ActionDialog(self, preset_storage=self.preset_storage, screenshot_preset_storage=self.screenshot_preset_storage)
+        if dialog.exec():
+            action = dialog.get_action()
+            if action:
+                self.current_macro.add_action(action)
+                self._load_macro_into_editor()
+    
+    def _edit_action(self):
+        """Редактирует выбранное действие."""
+        if not self.current_macro:
+            return
+        
+        selected_rows = self.actions_table.selectedItems()
+        if not selected_rows:
+            return
+        
+        row = selected_rows[0].row()
+        action = self.current_macro.actions[row]
+        
+        dialog = ActionDialog(self, action=action, preset_storage=self.preset_storage, screenshot_preset_storage=self.screenshot_preset_storage)
+        if dialog.exec():
+            new_action = dialog.get_action()
+            if new_action:
+                self.current_macro.actions[row] = new_action
+                self._load_macro_into_editor()
+    
+    def _remove_action(self):
+        """Удаляет выбранное действие."""
+        if not self.current_macro:
+            return
+        
+        selected_rows = self.actions_table.selectedItems()
+        if not selected_rows:
+            return
+        
+        row = selected_rows[0].row()
+        reply = QMessageBox.question(
+            self, "Подтверждение",
+            "Удалить это действие?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.current_macro.remove_action(self.current_macro.actions[row].id)
+            self._load_macro_into_editor()
+    
+    def _move_action_up(self):
+        """Перемещает действие вверх."""
+        if not self.current_macro:
+            return
+        
+        selected_rows = self.actions_table.selectedItems()
+        if not selected_rows:
+            return
+        
+        row = selected_rows[0].row()
+        if row > 0:
+            actions = self.current_macro.actions
+            actions[row], actions[row - 1] = actions[row - 1], actions[row]
+            self._load_macro_into_editor()
+            self.actions_table.selectRow(row - 1)
+    
+    def _move_action_down(self):
+        """Перемещает действие вниз."""
+        if not self.current_macro:
+            return
+        
+        selected_rows = self.actions_table.selectedItems()
+        if not selected_rows:
+            return
+        
+        row = selected_rows[0].row()
+        if row < len(self.current_macro.actions) - 1:
+            actions = self.current_macro.actions
+            actions[row], actions[row + 1] = actions[row + 1], actions[row]
+            self._load_macro_into_editor()
+            self.actions_table.selectRow(row + 1)
+    
+    def _on_action_selected(self):
+        """Обработчик выбора действия."""
+        selected = bool(self.actions_table.selectedItems())
+        self.edit_action_btn.setEnabled(selected)
+        self.remove_action_btn.setEnabled(selected)
+        self.move_up_btn.setEnabled(selected)
+        self.move_down_btn.setEnabled(selected)
+    
+    def _save_macro(self):
+        """Сохраняет макрос."""
+        if not self.current_macro:
+            return
+        
+        self.current_macro.name = self.macro_name_input.text()
+        self.current_macro.description = self.macro_desc_input.text()
+        
+        try:
+            self.macro_storage.update_macro(self.current_macro)
+            self._load_macros_list()
+            QMessageBox.information(self, "Успешно", "Макрос сохранен!")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить макрос: {e}")
+    
+    def _run_macro(self):
+        """Запускает макрос."""
+        if not self.current_macro:
+            return
+        
+        # Сохраняем перед запуском
+        self._save_macro()
+        
+        self.status_label.setText("Выполнение...")
+        self.status_label.setStyleSheet(f"font-size: 16px; color: {ModernStyle.SUCCESS};")
+        self.run_macro_btn.setEnabled(False)
+        self.stop_macro_btn.setEnabled(True)
+        self.progress_bar.setValue(0)
+        
+        # Запускаем в отдельном потоке (упрощенно - синхронно)
+        try:
+            self.macro_executor.execute(self.current_macro)
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка выполнения", str(e))
+            self._reset_status()
+    
+    def _stop_macro(self):
+        """Останавливает выполнение макроса."""
+        self.macro_executor.stop()
+        self._reset_status()
+    
+    def _reset_status(self):
+        """Сбрасывает статус."""
+        self.status_label.setText("Готов к работе")
+        self.status_label.setStyleSheet(f"font-size: 16px; color: {ModernStyle.TEXT_PRIMARY};")
+        self.run_macro_btn.setEnabled(True)
+        self.stop_macro_btn.setEnabled(False)
+        self.progress_bar.setValue(0)
+    
+    def _on_action_start(self, action, index):
+        """Вызывается при начале выполнения действия."""
+        self.status_label.setText(f"Действие {index + 1}: {action.type.value}")
+        total = len(self.current_macro.actions) if self.current_macro else 1
+        progress = int((index / total) * 100)
+        self.progress_bar.setValue(progress)
+    
+    def _on_action_complete(self, action, index):
+        """Вызывается при завершении действия."""
+        pass
+    
+    def _on_action_error(self, action, index, error):
+        """Вызывается при ошибке выполнения действия."""
+        self.status_label.setText(f"Ошибка: {error}")
+        self.status_label.setStyleSheet(f"font-size: 16px; color: {ModernStyle.DANGER};")
+    
+    def _on_macro_complete(self, macro):
+        """Вызывается при завершении макроса."""
+        self.status_label.setText("Макрос выполнен успешно!")
+        self.status_label.setStyleSheet(f"font-size: 16px; color: {ModernStyle.SUCCESS};")
+        self.progress_bar.setValue(100)
+        self._reset_status()
+    
+    def _on_macro_error(self, macro, error):
+        """Вызывается при ошибке выполнения макроса."""
+        self.status_label.setText(f"Ошибка макроса: {error}")
+        self.status_label.setStyleSheet(f"font-size: 16px; color: {ModernStyle.DANGER};")
+        self._reset_status()
+
+
+class NewMacroDialog(QDialog):
+    """Диалог создания нового макроса."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Новый макрос")
+        self.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(self)
+        
+        form_layout = QFormLayout()
+        
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("Название макроса")
+        form_layout.addRow("Название:", self.name_input)
+        
+        self.desc_input = QLineEdit()
+        self.desc_input.setPlaceholderText("Описание макроса")
+        form_layout.addRow("Описание:", self.desc_input)
+        
+        layout.addLayout(form_layout)
+        
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+    
+    def get_data(self) -> tuple[str, str]:
+        return self.name_input.text(), self.desc_input.text()
+
+
+class ActionDialog(QDialog):
+    """Диалог создания/редактирования действия макроса."""
+    
+    def __init__(self, parent=None, action: Optional[Any] = None, 
+                 preset_storage: PresetStorage = None,
+                 screenshot_preset_storage: ScreenshotPresetStorage = None):
+        super().__init__(parent)
+        self.action = action
+        self.preset_storage = preset_storage or PresetStorage()
+        self.screenshot_preset_storage = screenshot_preset_storage or ScreenshotPresetStorage()
+        
+        self.setWindowTitle("Редактирование действия" if action else "Новое действие")
+        self.setMinimumSize(600, 700)
+        
+        self._setup_ui()
+        if action:
+            self._load_action()
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # Тип действия
+        type_layout = QHBoxLayout()
+        type_layout.addWidget(QLabel("Тип действия:"))
+        self.type_combo = QComboBox()
+        self.type_combo.addItems([
+            "click_absolute", "click_relative", "click_image",
+            "delay", "condition", "loop", "goto", "state_check",
+            "normalize_window", "focus_window", "take_screenshot"
+        ])
+        self.type_combo.currentTextChanged.connect(self._on_type_changed)
+        type_layout.addWidget(self.type_combo)
+        type_layout.addStretch()
+        layout.addLayout(type_layout)
+        
+        # Общие настройки
+        common_group = QGroupBox("Общие настройки")
+        common_layout = QFormLayout(common_group)
+        
+        self.label_input = QLineEdit()
+        self.label_input.setPlaceholderText("Метка для переходов (Label)")
+        common_layout.addRow("Метка (Label):", self.label_input)
+        
+        self.desc_input = QLineEdit()
+        self.desc_input.setPlaceholderText("Описание действия")
+        common_layout.addRow("Описание:", self.desc_input)
+        
+        self.enabled_check = QCheckBox("Включено")
+        self.enabled_check.setChecked(True)
+        common_layout.addRow("", self.enabled_check)
+        
+        retry_layout = QHBoxLayout()
+        self.retry_count_spin = QSpinBox()
+        self.retry_count_spin.setRange(0, 10)
+        self.retry_count_spin.setValue(0)
+        retry_layout.addWidget(self.retry_count_spin)
+        retry_layout.addWidget(QLabel("повторений"))
+        common_layout.addRow("Повторы при ошибке:", retry_layout)
+        
+        retry_delay_layout = QHBoxLayout()
+        self.retry_delay_spin = QDoubleSpinBox()
+        self.retry_delay_spin.setRange(0.1, 60.0)
+        self.retry_delay_spin.setValue(1.0)
+        self.retry_delay_spin.setSingleStep(0.5)
+        retry_delay_layout.addWidget(self.retry_delay_spin)
+        retry_delay_layout.addWidget(QLabel("сек"))
+        common_layout.addRow("Задержка между повторами:", retry_delay_layout)
+        
+        layout.addWidget(common_group)
+        
+        # Специфичные настройки для каждого типа
+        self.settings_stack = QStackedWidget()
+        
+        # Click Absolute
+        abs_widget = QWidget()
+        abs_layout = QFormLayout(abs_widget)
+        self.abs_x_spin = QSpinBox()
+        self.abs_x_spin.setRange(-10000, 10000)
+        abs_layout.addRow("X:", self.abs_x_spin)
+        self.abs_y_spin = QSpinBox()
+        self.abs_y_spin.setRange(-10000, 10000)
+        abs_layout.addRow("Y:", self.abs_y_spin)
+        self.abs_button_combo = QComboBox()
+        self.abs_button_combo.addItems(["left", "right", "middle"])
+        abs_layout.addRow("Кнопка:", self.abs_button_combo)
+        self.abs_double_check = QCheckBox("Двойной клик")
+        abs_layout.addRow("", self.abs_double_check)
+        self._add_offset_settings(abs_layout)
+        self.settings_stack.addWidget(abs_widget)
+        
+        # Click Relative
+        rel_widget = QWidget()
+        rel_layout = QFormLayout(rel_widget)
+        self.rel_preset_combo = QComboBox()
+        self._update_presets()
+        rel_layout.addRow("Пресет окна:", self.rel_preset_combo)
+        self.rel_x_spin = QSpinBox()
+        self.rel_x_spin.setRange(-10000, 10000)
+        rel_layout.addRow("X (относительно):", self.rel_x_spin)
+        self.rel_y_spin = QSpinBox()
+        self.rel_y_spin.setRange(-10000, 10000)
+        rel_layout.addRow("Y (относительно):", self.rel_y_spin)
+        self.rel_button_combo = QComboBox()
+        self.rel_button_combo.addItems(["left", "right", "middle"])
+        rel_layout.addRow("Кнопка:", self.rel_button_combo)
+        self.rel_double_check = QCheckBox("Двойной клик")
+        rel_layout.addRow("", self.rel_double_check)
+        self._add_offset_settings(rel_layout)
+        self.settings_stack.addWidget(rel_widget)
+        
+        # Click Image
+        img_widget = QWidget()
+        img_layout = QFormLayout(img_widget)
+        self.img_preset_combo = QComboBox()
+        self._update_screenshot_presets()
+        img_layout.addRow("Пресет изображения:", self.img_preset_combo)
+        self.img_confidence_spin = QDoubleSpinBox()
+        self.img_confidence_spin.setRange(0.1, 1.0)
+        self.img_confidence_spin.setSingleStep(0.05)
+        self.img_confidence_spin.setValue(0.8)
+        img_layout.addRow("Порог уверенности:", self.img_confidence_spin)
+        self.img_position_combo = QComboBox()
+        self.img_position_combo.addItems(["center", "top_left", "random"])
+        img_layout.addRow("Позиция клика:", self.img_position_combo)
+        self.img_button_combo = QComboBox()
+        self.img_button_combo.addItems(["left", "right", "middle"])
+        img_layout.addRow("Кнопка:", self.img_button_combo)
+        self.img_double_check = QCheckBox("Двойной клик")
+        img_layout.addRow("", self.img_double_check)
+        self._add_offset_settings(img_layout)
+        self.settings_stack.addWidget(img_widget)
+        
+        # Delay
+        delay_widget = QWidget()
+        delay_layout = QFormLayout(delay_widget)
+        self.delay_duration_spin = QDoubleSpinBox()
+        self.delay_duration_spin.setRange(0.1, 3600.0)
+        self.delay_duration_spin.setSingleStep(0.5)
+        self.delay_duration_spin.setValue(1.0)
+        delay_layout.addRow("Длительность (сек):", self.delay_duration_spin)
+        self.settings_stack.addWidget(delay_widget)
+        
+        # Condition
+        cond_widget = QWidget()
+        cond_layout = QFormLayout(cond_widget)
+        self.cond_type_combo = QComboBox()
+        self.cond_type_combo.addItems(["image_exists", "image_not_exists", "color_at_pixel"])
+        self.cond_type_combo.currentTextChanged.connect(self._on_condition_type_changed)
+        cond_layout.addRow("Тип условия:", self.cond_type_combo)
+        
+        self.cond_preset_combo = QComboBox()
+        self._update_screenshot_presets()
+        cond_layout.addRow("Пресет изображения:", self.cond_preset_combo)
+        self.cond_confidence_spin = QDoubleSpinBox()
+        self.cond_confidence_spin.setRange(0.1, 1.0)
+        self.cond_confidence_spin.setSingleStep(0.05)
+        self.cond_confidence_spin.setValue(0.8)
+        cond_layout.addRow("Порог уверенности:", self.cond_confidence_spin)
+        
+        self.cond_color_layout = QHBoxLayout()
+        self.cond_x_spin = QSpinBox()
+        self.cond_x_spin.setRange(-10000, 10000)
+        self.cond_color_layout.addWidget(self.cond_x_spin)
+        self.cond_y_spin = QSpinBox()
+        self.cond_y_spin.setRange(-10000, 10000)
+        self.cond_color_layout.addWidget(self.cond_y_spin)
+        cond_layout.addRow("Координаты для проверки цвета:", self.cond_color_layout)
+        
+        self.cond_true_goto = QLineEdit()
+        cond_layout.addRow("Переход если True (Label):", self.cond_true_goto)
+        self.cond_false_goto = QLineEdit()
+        cond_layout.addRow("Переход если False (Label):", self.cond_false_goto)
+        self.settings_stack.addWidget(cond_widget)
+        
+        # Loop
+        loop_widget = QWidget()
+        loop_layout = QFormLayout(loop_widget)
+        self.loop_type_combo = QComboBox()
+        self.loop_type_combo.addItems(["count", "while_image_exists", "while_image_not_exists"])
+        self.loop_type_combo.currentTextChanged.connect(self._on_loop_type_changed)
+        loop_layout.addRow("Тип цикла:", self.loop_type_combo)
+        self.loop_iterations_spin = QSpinBox()
+        self.loop_iterations_spin.setRange(1, 1000)
+        self.loop_iterations_spin.setValue(1)
+        loop_layout.addRow("Количество итераций:", self.loop_iterations_spin)
+        self.loop_max_spin = QSpinBox()
+        self.loop_max_spin.setRange(1, 10000)
+        self.loop_max_spin.setValue(100)
+        loop_layout.addRow("Макс. итераций:", self.loop_max_spin)
+        self.settings_stack.addWidget(loop_widget)
+        
+        # Goto
+        goto_widget = QWidget()
+        goto_layout = QFormLayout(goto_widget)
+        self.goto_target_input = QLineEdit()
+        goto_layout.addRow("Целевая метка (Label):", self.goto_target_input)
+        self.settings_stack.addWidget(goto_widget)
+        
+        # State Check
+        state_widget = QWidget()
+        state_layout = QFormLayout(state_widget)
+        self.state_area_type_combo = QComboBox()
+        self.state_area_type_combo.addItems(["absolute", "relative"])
+        state_layout.addRow("Тип области:", self.state_area_type_combo)
+        self.state_x_spin = QSpinBox()
+        self.state_x_spin.setRange(-10000, 10000)
+        self.state_x_spin.setValue(0)
+        state_layout.addRow("X:", self.state_x_spin)
+        self.state_y_spin = QSpinBox()
+        self.state_y_spin.setRange(-10000, 10000)
+        self.state_y_spin.setValue(0)
+        state_layout.addRow("Y:", self.state_y_spin)
+        self.state_w_spin = QSpinBox()
+        self.state_w_spin.setRange(1, 10000)
+        self.state_w_spin.setValue(100)
+        state_layout.addRow("Ширина:", self.state_w_spin)
+        self.state_h_spin = QSpinBox()
+        self.state_h_spin.setRange(1, 10000)
+        self.state_h_spin.setValue(100)
+        state_layout.addRow("Высота:", self.state_h_spin)
+        self.state_wait_spin = QDoubleSpinBox()
+        self.state_wait_spin.setRange(0.1, 60.0)
+        self.state_wait_spin.setSingleStep(0.5)
+        self.state_wait_spin.setValue(1.0)
+        state_layout.addRow("Время ожидания (сек):", self.state_wait_spin)
+        self.state_threshold_spin = QDoubleSpinBox()
+        self.state_threshold_spin.setRange(0.5, 1.0)
+        self.state_threshold_spin.setSingleStep(0.05)
+        self.state_threshold_spin.setValue(0.95)
+        state_layout.addRow("Порог схожести:", self.state_threshold_spin)
+        self.state_unchanged_spin = QSpinBox()
+        self.state_unchanged_spin.setRange(1, 10)
+        self.state_unchanged_spin.setValue(1)
+        state_layout.addRow("Проверок для 'не изменилось':", self.state_unchanged_spin)
+        self.state_changed_spin = QSpinBox()
+        self.state_changed_spin.setRange(1, 10)
+        self.state_changed_spin.setValue(1)
+        state_layout.addRow("Проверок для 'изменилось':", self.state_changed_spin)
+        self.state_unchanged_goto = QLineEdit()
+        state_layout.addRow("Переход если не изменилось (Label):", self.state_unchanged_goto)
+        self.state_changed_goto = QLineEdit()
+        state_layout.addRow("Переход если изменилось (Label):", self.state_changed_goto)
+        self.settings_stack.addWidget(state_widget)
+        
+        # Normalize Window
+        norm_widget = QWidget()
+        norm_layout = QFormLayout(norm_widget)
+        self.norm_preset_combo = QComboBox()
+        self._update_presets()
+        norm_layout.addRow("Пресет нормализации:", self.norm_preset_combo)
+        self.settings_stack.addWidget(norm_widget)
+        
+        # Focus Window
+        focus_widget = QWidget()
+        focus_layout = QFormLayout(focus_widget)
+        self.focus_preset_combo = QComboBox()
+        self._update_presets()
+        focus_layout.addRow("Пресет окна:", self.focus_preset_combo)
+        self.settings_stack.addWidget(focus_widget)
+        
+        # Take Screenshot
+        shot_widget = QWidget()
+        shot_layout = QFormLayout(shot_widget)
+        self.shot_id_input = QLineEdit()
+        shot_layout.addRow("ID скриншота:", self.shot_id_input)
+        self.shot_x_spin = QSpinBox()
+        self.shot_x_spin.setRange(-10000, 10000)
+        shot_layout.addRow("X:", self.shot_x_spin)
+        self.shot_y_spin = QSpinBox()
+        self.shot_y_spin.setRange(-10000, 10000)
+        shot_layout.addRow("Y:", self.shot_y_spin)
+        self.shot_w_spin = QSpinBox()
+        self.shot_w_spin.setRange(1, 10000)
+        shot_layout.addRow("Ширина:", self.shot_w_spin)
+        self.shot_h_spin = QSpinBox()
+        self.shot_h_spin.setRange(1, 10000)
+        shot_layout.addRow("Высота:", self.shot_h_spin)
+        self.settings_stack.addWidget(shot_widget)
+        
+        layout.addWidget(self.settings_stack)
+        
+        # Кнопки
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+        
+        # Устанавливаем первый тип
+        self._on_type_changed(self.type_combo.currentText())
+    
+    def _add_offset_settings(self, layout: QFormLayout):
+        """Добавляет настройки отклонения."""
+        offset_group = QGroupBox("Отклонение координат")
+        offset_layout = QFormLayout(offset_group)
+        
+        self.offset_enabled = QCheckBox("Включить случайное отклонение")
+        self.offset_enabled.setChecked(True)
+        offset_layout.addRow("", self.offset_enabled)
+        
+        offset_x_layout = QHBoxLayout()
+        self.offset_x_spin = QSpinBox()
+        self.offset_x_spin.setRange(0, 100)
+        self.offset_x_spin.setValue(5)
+        offset_x_layout.addWidget(self.offset_x_spin)
+        offset_x_layout.addWidget(QLabel("px"))
+        offset_layout.addRow("Макс. отклонение X:", offset_x_layout)
+        
+        offset_y_layout = QHBoxLayout()
+        self.offset_y_spin = QSpinBox()
+        self.offset_y_spin.setRange(0, 100)
+        self.offset_y_spin.setValue(5)
+        offset_y_layout.addWidget(self.offset_y_spin)
+        offset_y_layout.addWidget(QLabel("px"))
+        offset_layout.addRow("Макс. отклонение Y:", offset_y_layout)
+        
+        layout.addRow("", offset_group)
+    
+    def _update_presets(self):
+        """Обновляет список пресетов нормализации."""
+        self.rel_preset_combo.clear()
+        self.norm_preset_combo.clear()
+        self.focus_preset_combo.clear()
+        
+        presets = self.preset_storage.get_all_presets()
+        for preset in presets:
+            display = f"{preset.name} ({preset.process_name})"
+            self.rel_preset_combo.addItem(display, preset.id)
+            self.norm_preset_combo.addItem(display, preset.id)
+            self.focus_preset_combo.addItem(display, preset.id)
+    
+    def _update_screenshot_presets(self):
+        """Обновляет список пресетов скриншотов."""
+        self.img_preset_combo.clear()
+        self.cond_preset_combo.clear()
+        
+        presets = self.screenshot_preset_storage.get_all_presets()
+        for preset in presets:
+            self.img_preset_combo.addItem(preset.name, preset.id)
+            self.cond_preset_combo.addItem(preset.name, preset.id)
+    
+    def _on_type_changed(self, type_name: str):
+        """Переключает вид настроек в зависимости от типа."""
+        type_map = {
+            "click_absolute": 0,
+            "click_relative": 1,
+            "click_image": 2,
+            "delay": 3,
+            "condition": 4,
+            "loop": 5,
+            "goto": 6,
+            "state_check": 7,
+            "normalize_window": 8,
+            "focus_window": 9,
+            "take_screenshot": 10,
+        }
+        self.settings_stack.setCurrentIndex(type_map.get(type_name, 0))
+    
+    def _on_condition_type_changed(self, type_name: str):
+        """Показывает/скрывает поля для проверки цвета."""
+        show_color = type_name == "color_at_pixel"
+        self.cond_preset_combo.setVisible(not show_color)
+        self.cond_confidence_spin.setVisible(not show_color)
+        self.cond_x_spin.setVisible(show_color)
+        self.cond_y_spin.setVisible(show_color)
+    
+    def _on_loop_type_changed(self, type_name: str):
+        """Показывает/скрывает поля для разных типов циклов."""
+        show_iterations = type_name == "count"
+        self.loop_iterations_spin.setVisible(show_iterations)
+    
+    def _load_action(self):
+        """Загружает данные действия в форму."""
+        if not self.action:
+            return
+        
+        self.type_combo.setCurrentText(self.action.type.value)
+        self.label_input.setText(self.action.label or "")
+        self.desc_input.setText(self.action.description or "")
+        self.enabled_check.setChecked(self.action.enabled)
+        self.retry_count_spin.setValue(self.action.retry_count)
+        self.retry_delay_spin.setValue(self.action.retry_delay)
+        
+        # Загружаем специфичные настройки в зависимости от типа
+        # (упрощенная реализация)
+    
+    def get_action(self) -> Optional[Any]:
+        """Возвращает созданное/отредактированное действие."""
+        action_type = ActionType(self.type_combo.currentText())
+        action_id = self.action.id if self.action else str(uuid.uuid4())[:8]
+        
+        offset = ClickOffset(
+            enabled=self.offset_enabled.isChecked(),
+            max_offset_x=self.offset_x_spin.value(),
+            max_offset_y=self.offset_y_spin.value(),
+        )
+        
+        match action_type:
+            case ActionType.CLICK_ABSOLUTE:
+                return ClickAbsoluteAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    x=self.abs_x_spin.value(),
+                    y=self.abs_y_spin.value(),
+                    button=self.abs_button_combo.currentText(),
+                    double_click=self.abs_double_check.isChecked(),
+                    offset=offset,
+                )
+            case ActionType.CLICK_RELATIVE:
+                preset_id = self.rel_preset_combo.currentData() or ""
+                return ClickRelativeAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    preset_id=preset_id,
+                    x=self.rel_x_spin.value(),
+                    y=self.rel_y_spin.value(),
+                    button=self.rel_button_combo.currentText(),
+                    double_click=self.rel_double_check.isChecked(),
+                    offset=offset,
+                )
+            case ActionType.CLICK_IMAGE:
+                preset_id = self.img_preset_combo.currentData() or ""
+                return ClickImageAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    preset_id=preset_id,
+                    confidence_threshold=self.img_confidence_spin.value(),
+                    click_position=self.img_position_combo.currentText(),
+                    button=self.img_button_combo.currentText(),
+                    double_click=self.img_double_check.isChecked(),
+                    offset=offset,
+                )
+            case ActionType.DELAY:
+                return DelayAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    duration=self.delay_duration_spin.value(),
+                )
+            case ActionType.CONDITION:
+                on_true = ConditionBranch(
+                    action="goto" if self.cond_true_goto.text() else "continue",
+                    target_label=self.cond_true_goto.text(),
+                )
+                on_false = ConditionBranch(
+                    action="goto" if self.cond_false_goto.text() else "continue",
+                    target_label=self.cond_false_goto.text(),
+                )
+                return ConditionAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    condition_type=self.cond_type_combo.currentText(),
+                    preset_id=self.cond_preset_combo.currentData() or "",
+                    confidence_threshold=self.cond_confidence_spin.value(),
+                    check_x=self.cond_x_spin.value(),
+                    check_y=self.cond_y_spin.value(),
+                    on_true=on_true,
+                    on_false=on_false,
+                )
+            case ActionType.LOOP:
+                return LoopAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    loop_type=self.loop_type_combo.currentText(),
+                    iterations=self.loop_iterations_spin.value(),
+                    max_iterations=self.loop_max_spin.value(),
+                )
+            case ActionType.GOTO:
+                return GotoAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    target_label=self.goto_target_input.text(),
+                )
+            case ActionType.STATE_CHECK:
+                on_unchanged = ConditionBranch(
+                    action="goto" if self.state_unchanged_goto.text() else "continue",
+                    target_label=self.state_unchanged_goto.text(),
+                )
+                on_changed = ConditionBranch(
+                    action="goto" if self.state_changed_goto.text() else "continue",
+                    target_label=self.state_changed_goto.text(),
+                )
+                return StateCheckAction(
+                    id=action_id,
+                    type=action_type,
+                    label=self.label_input.text(),
+                    description=self.desc_input.text(),
+                    enabled=self.enabled_check.isChecked(),
+                    retry_count=self.retry_count_spin.value(),
+                    retry_delay=self.retry_delay_spin.value(),
+                    area_type=self.state_area_type_combo.currentText(),
+                    area_x=self.state_x_spin.value(),
+                    area_y=self.state_y_spin.value(),
+                    area_width=self.state_w_spin.value(),
+                    area_height=self.state_h_spin.value(),
+                    wait_duration=self.state_wait_spin.value(),
+                    comparison_threshold=self.state_threshold_spin.value(),
+                    unchanged_required=self.state_unchanged_spin.value(),
+                    changed_allowed=self.state_changed_spin.value(),
+                    on_unchanged=on_unchanged,
+                    on_changed=on_changed,
+                )
+            case _:
+                return None
+
+
 class CVRecognitionWidget(QWidget):
     """Виджет для CV распознавания областей на экране по пресетам изображений."""
     
@@ -1984,6 +3033,11 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.btn_cv_recognition)
         self.nav_buttons.append(self.btn_cv_recognition)
         
+        # Кнопка макросов
+        self.btn_macros = SidebarButton("🎬", "Макросы")
+        sidebar_layout.addWidget(self.btn_macros)
+        self.nav_buttons.append(self.btn_macros)
+        
         sidebar_layout.addStretch()
         
         # Добавляем боковую панель в основной макет
@@ -2016,12 +3070,30 @@ class MainWindow(QMainWindow):
         )
         self.content_stack.addWidget(self.cv_recognition)
         
+        # Вкладка 4: Макросы
+        self.macro_storage = MacroStorage()
+        self.macro_executor = MacroExecutor(
+            window_manager=self.window_manager,
+            normalizer=self.normalizer,
+            preset_storage=self.preset_storage,
+            screenshot_manager=self.screenshot_manager,
+            cv_matcher=self.cv_matcher,
+        )
+        self.macros_widget = MacrosWidget(
+            macro_storage=self.macro_storage,
+            macro_executor=self.macro_executor,
+            screenshot_preset_storage=self.screenshot_preset_storage,
+            preset_storage=self.preset_storage,
+        )
+        self.content_stack.addWidget(self.macros_widget)
+        
         main_layout.addWidget(self.content_stack)
         
         # Подключаем кнопки навигации
         self.btn_window_selection.clicked.connect(lambda: self._switch_tab(0))
         self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(1))
         self.btn_cv_recognition.clicked.connect(lambda: self._switch_tab(2))
+        self.btn_macros.clicked.connect(lambda: self._switch_tab(3))
     
     def _switch_tab(self, index: int):
         """Переключает вкладку и обновляет состояние кнопок."""
