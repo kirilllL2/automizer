@@ -1871,7 +1871,7 @@ class ScreenshotPresetDialog(QDialog):
                 windows = window_manager.get_windows()
                 for window in windows:
                     if process_preset.process_name.lower() in window.title.lower():
-                        window_id = window.hwnd
+                        window_id = window.window_id
                         break
         
         return {
