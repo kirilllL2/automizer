@@ -16,6 +16,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
+from pathlib import Path
 
 from src.normalizer import ProcessNormalizer, NormalizationPreset
 from src.window_manager import WindowManager, WindowInfo
