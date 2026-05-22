@@ -30,9 +30,12 @@ class ScreenshotPreset:
     width: int
     height: int
     description: str = ""
+    use_relative_coords: bool = False  # Если True, координаты относительные для окна процесса
+    window_id: Optional[int] = None  # Handle окна для относительных координат (опционально)
 
     def __repr__(self) -> str:
-        return f"ScreenshotPreset(id={self.id}, name='{self.name}', process='{self.process_preset_id}')"
+        coord_type = "relative" if self.use_relative_coords else "global"
+        return f"ScreenshotPreset(id={self.id}, name='{self.name}', process='{self.process_preset_id}', coords={coord_type})"
 
 
 class ScreenshotPresetStorage:
@@ -80,6 +83,8 @@ class ScreenshotPresetStorage:
                 "width": preset.width,
                 "height": preset.height,
                 "description": preset.description,
+                "use_relative_coords": preset.use_relative_coords,
+                "window_id": preset.window_id,
             }
             for preset_id, preset in self._presets.items()
         }
@@ -97,6 +102,8 @@ class ScreenshotPresetStorage:
         width: int,
         height: int,
         description: str = "",
+        use_relative_coords: bool = False,
+        window_id: Optional[int] = None,
     ) -> ScreenshotPreset:
         """
         Добавляет новый пресет скриншота.
@@ -111,6 +118,8 @@ class ScreenshotPresetStorage:
             width: Ширина области скриншота.
             height: Высота области скриншота.
             description: Описание пресета.
+            use_relative_coords: Если True, координаты относительные для окна процесса.
+            window_id: Handle окна для относительных координат (опционально).
 
         Returns:
             Созданный пресет.
@@ -131,6 +140,8 @@ class ScreenshotPresetStorage:
             width=width,
             height=height,
             description=description,
+            use_relative_coords=use_relative_coords,
+            window_id=window_id,
         )
         self._presets[preset_id] = preset
         self.save()
@@ -164,6 +175,8 @@ class ScreenshotPresetStorage:
         width: Optional[int] = None,
         height: Optional[int] = None,
         description: Optional[str] = None,
+        use_relative_coords: Optional[bool] = None,
+        window_id: Optional[int] = None,
     ) -> Optional[ScreenshotPreset]:
         """
         Обновляет существующий пресет.
@@ -178,6 +191,8 @@ class ScreenshotPresetStorage:
             width: Новая ширина (None = не менять).
             height: Новая высота (None = не менять).
             description: Новое описание (None = не менять).
+            use_relative_coords: Использовать относительные координаты (None = не менять).
+            window_id: Handle окна (None = не менять).
 
         Returns:
             Обновленный пресет или None, если пресет не найден.
@@ -194,6 +209,8 @@ class ScreenshotPresetStorage:
         preset.width = width if width is not None else preset.width
         preset.height = height if height is not None else preset.height
         preset.description = description if description is not None else preset.description
+        preset.use_relative_coords = use_relative_coords if use_relative_coords is not None else preset.use_relative_coords
+        preset.window_id = window_id if window_id is not None else preset.window_id
 
         self.save()
         return preset
@@ -244,29 +261,66 @@ class ScreenshotPresetStorage:
         self,
         preset: ScreenshotPreset,
         screenshot_manager: ScreenshotManager,
-    ) -> ScreenshotInfo:
+        window_manager=None,  # WindowManager для захвата по относительным координатам
+    ) -> Optional[ScreenshotInfo]:
         """
         Делает скриншот используя пресет.
 
         Скриншот сохраняется по пути, указанному в пресете (screenshot_path).
         Если файл уже существует, он будет перезаписан.
+        
+        Если use_relative_coords=True и указан window_manager, используется
+        захват по относительным координатам окна (работает даже если окно не активно).
 
         Args:
             preset: Пресет для использования.
             screenshot_manager: Менеджер скриншотов.
+            window_manager: Менеджер окон (нужен для относительных координат).
 
         Returns:
-            Информация о созданном/обновленном скриншоте.
+            Информация о созданном/обновленном скриншоте или None при ошибке.
         """
         # Используем ID пресета как ID скриншота для обеспечения соответствия 1:1
         screenshot_id = preset.id
         
-        return screenshot_manager.capture(
-            x=preset.x,
-            y=preset.y,
-            width=preset.width,
-            height=preset.height,
-            screenshot_id=screenshot_id,
-            description=f"Скриншот по пресету '{preset.name}'",
-            output_path=preset.screenshot_path,
-        )
+        # Если используются относительные координаты и есть window_manager
+        if preset.use_relative_coords and window_manager is not None and preset.window_id is not None:
+            # Захватываем область окна по относительным координатам
+            success = window_manager.capture_window_area(
+                window_id=preset.window_id,
+                x=preset.x,
+                y=preset.y,
+                width=preset.width,
+                height=preset.height,
+                output_path=preset.screenshot_path,
+            )
+            
+            if not success:
+                return None
+            
+            # Создаем информацию о скриншоте
+            from datetime import datetime
+            from pathlib import Path
+            screenshot_info = ScreenshotInfo(
+                id=screenshot_id,
+                path=Path(preset.screenshot_path),
+                x=preset.x,
+                y=preset.y,
+                width=preset.width,
+                height=preset.height,
+                created_at=datetime.now(),
+                description=f"Скриншот по пресету '{preset.name}' (относительные координаты)",
+            )
+            screenshot_manager._screenshots[screenshot_id] = screenshot_info
+            return screenshot_info
+        else:
+            # Стандартный захват по глобальным координатам
+            return screenshot_manager.capture(
+                x=preset.x,
+                y=preset.y,
+                width=preset.width,
+                height=preset.height,
+                screenshot_id=screenshot_id,
+                description=f"Скриншот по пресету '{preset.name}'",
+                output_path=preset.screenshot_path,
+            )

@@ -6,24 +6,16 @@
 - Изменения положения окон на экране
 - Фокусировки на окнах
 - Изменения размера окон
+- Получения скриншотов области окна (даже если оно не активно)
 """
 
 from dataclasses import dataclass
 from typing import Optional
-
-try:
-    import win32gui
-    import win32process
-    import win32con
-    WIN32_AVAILABLE = True
-except ImportError:
-    # Stub for non-Windows platforms
-    from src.window_manager_stub import (
-        IsWindowVisible, GetWindowRect, MoveWindow, GetWindowText,
-        ShowWindow, SetForegroundWindow, IsIconic, EnumWindows,
-        GetWindowThreadProcessId, SW_RESTORE
-    )
-    WIN32_AVAILABLE = False
+import win32gui
+import win32process
+import win32con
+import win32ui
+WIN32_AVAILABLE = True
 
 
 @dataclass
@@ -230,4 +222,63 @@ class WindowManager:
             win32gui.MoveWindow(window_id, new_x, new_y, new_width, new_height, True)
             return True
         except Exception:
+            return False
+
+    def capture_window_area(
+        self,
+        window_id: int,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        output_path: str,
+    ) -> bool:
+        """
+        Делает скриншот области окна по относительным координатам.
+        
+        Важно: Эта функция работает даже если окно находится за другими окнами
+        или не активно, так как использует DC (Device Context) окна напрямую.
+        
+        Args:
+            window_id: Handle окна.
+            x: Относительная координата X внутри окна (от левого верхнего угла окна).
+            y: Относительная координата Y внутри окна (от левого верхнего угла окна).
+            width: Ширина области для захвата.
+            height: Высота области для захвата.
+            output_path: Путь для сохранения файла скриншота.
+            
+        Returns:
+            True, если операция успешна.
+        """
+        try:
+            # Получаем DC окна
+            hwnd_dc = win32gui.GetWindowDC(window_id)
+            
+            # Создаем совместимый DC
+            mfc_dc = win32ui.CreateDCFromHandle(hwnd_dc)
+            save_dc = mfc_dc.CreateCompatibleDC()
+            
+            # Создаем битмап
+            bitmap = win32ui.CreateBitmap()
+            bitmap.CreateCompatibleBitmap(mfc_dc, width, height)
+            
+            # Выбираем битмап в DC
+            save_dc.SelectObject(bitmap)
+            
+            # Копируем область из окна в битмап
+            # BitBlt копирует указанную область из исходного DC в целевой
+            save_dc.BitBlt((0, 0), (width, height), mfc_dc, (x, y), win32con.SRCCOPY)
+            
+            # Сохраняем битмап в файл
+            bitmap.SaveBitmapFile(save_dc, output_path)
+            
+            # Освобождаем ресурсы
+            win32gui.DeleteObject(bitmap.GetHandle())
+            save_dc.DeleteDC()
+            mfc_dc.DeleteDC()
+            win32gui.ReleaseDC(window_id, hwnd_dc)
+            
+            return True
+        except Exception as e:
+            print(f"Ошибка при захвате области окна: {e}")
             return False
