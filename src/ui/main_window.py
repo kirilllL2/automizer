@@ -1317,6 +1317,8 @@ class ScreenshotPresetsWidget(QWidget):
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
+            # Удаляем preset_id из data, т.к. он передается отдельно
+            data.pop("preset_id", None)
             self.preset_storage.update_preset(preset_id=preset.id, **data)
             self._load_presets()
             QMessageBox.information(self, "Успех", "Пресет обновлен!")
@@ -1397,6 +1399,8 @@ class ScreenshotPresetsWidget(QWidget):
             return
         
         path = os.path.dirname(screenshot_path)
+        # Преобразуем в абсолютный путь
+        path = os.path.abspath(path)
         if not os.path.exists(path):
             QMessageBox.warning(self, "Предупреждение", f"Папка не найдена: {path}")
             return
@@ -1733,12 +1737,12 @@ class MainWindow(QMainWindow):
         # Кнопки навигации
         self.nav_buttons = []
         
-        self.btn_window_selection = SidebarButton("🪟", "Выбор процесса")
+        self.btn_window_selection = SidebarButton("🪟", "Приложения")
         self.btn_window_selection.setChecked(True)
         sidebar_layout.addWidget(self.btn_window_selection)
         self.nav_buttons.append(self.btn_window_selection)
         
-        self.btn_screenshot_presets = SidebarButton("🎬", "Пресеты скриншотов")
+        self.btn_screenshot_presets = SidebarButton("🎬", "Скриншоты")
         sidebar_layout.addWidget(self.btn_screenshot_presets)
         self.nav_buttons.append(self.btn_screenshot_presets)
         
