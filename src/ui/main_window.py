@@ -384,6 +384,11 @@ class WindowSelectionWidget(QWidget):
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(12)
         
+        self.apply_preset_btn = QPushButton("📋 Применить пресет")
+        self.apply_preset_btn.setObjectName("secondaryBtn")
+        self.apply_preset_btn.clicked.connect(self._apply_preset_from_selection)
+        buttons_layout.addWidget(self.apply_preset_btn)
+        
         self.apply_btn = QPushButton("✓ Применить к окну")
         self.apply_btn.setObjectName("successBtn")
         self.apply_btn.clicked.connect(self._apply_to_window)
@@ -565,6 +570,240 @@ class WindowSelectionWidget(QWidget):
                     f"Пресет '{data['name']}' успешно сохранен!")
             except ValueError as e:
                 QMessageBox.critical(self, "Ошибка", str(e))
+    
+    def _apply_preset_from_selection(self):
+        """Применяет пресет к выделенному процессу или просит выбрать."""
+        # Проверяем, есть ли выделенное окно
+        selected_rows = self.windows_table.selectedItems()
+        
+        if selected_rows:
+            # Есть выделенное окно - ищем пресет по нему
+            row = selected_rows[0].row()
+            title = self.windows_table.item(row, 0).text()
+            
+            # Ищем пресеты для этого процесса
+            matching_presets = []
+            all_presets = self.storage.get_all_presets()
+            
+            for preset in all_presets:
+                if preset.process_name.lower() in title.lower() or title.lower() in preset.process_name.lower():
+                    matching_presets.append(preset)
+            
+            if len(matching_presets) == 0:
+                QMessageBox.information(self, "Информация", 
+                    f"Для процесса '{title}' не найдено пресетов.\n\n"
+                    f"Вы можете сохранить текущие настройки как пресет, нажав '💾 Сохранить как пресет'.")
+            elif len(matching_presets) == 1:
+                # Найден один пресет - применяем сразу
+                preset = matching_presets[0]
+                self._apply_preset_values(preset, apply_immediately=True)
+            else:
+                # Найдено несколько пресетов - даем выбрать
+                self._show_preset_selection_dialog(title, matching_presets)
+        else:
+            # Нет выделенного окна - просим выбрать процесс и пресет
+            self._show_process_and_preset_dialog()
+    
+    def _apply_preset_values(self, preset: NormalizationPreset, apply_immediately: bool = True):
+        """Устанавливает значения из пресета в поля ввода и применяет к окну."""
+        self.x_input.setValue(preset.x)
+        self.y_input.setValue(preset.y)
+        self.width_input.setValue(preset.width)
+        self.height_input.setValue(preset.height)
+        
+        # Если окно выбрано и нужно применить сразу - применяем
+        if apply_immediately and self.current_window:
+            self._apply_to_window()
+    
+    def _show_preset_selection_dialog(self, process_title: str, presets: list[NormalizationPreset]):
+        """Показывает диалог выбора пресета при наличии нескольких вариантов."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Выберите пресет")
+        dialog.setMinimumWidth(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        label = QLabel(f"Для процесса '{process_title}' найдено несколько пресетов:")
+        layout.addWidget(label)
+        
+        # Список пресетов
+        preset_list = QTableWidget()
+        preset_list.setColumnCount(3)
+        preset_list.setHorizontalHeaderLabels(["Имя", "Процесс", "Описание"])
+        preset_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        preset_list.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        preset_list.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        
+        for preset in presets:
+            row = preset_list.rowCount()
+            preset_list.insertRow(row)
+            preset_list.setItem(row, 0, QTableWidgetItem(preset.name))
+            preset_list.setItem(row, 1, QTableWidgetItem(preset.process_name))
+            preset_list.setItem(row, 2, QTableWidgetItem(preset.description))
+        
+        layout.addWidget(preset_list)
+        
+        # Кнопки
+        buttons_layout = QHBoxLayout()
+        
+        apply_btn = QPushButton("✓ Применить")
+        apply_btn.clicked.connect(lambda: self._on_preset_selected(dialog, preset_list, presets))
+        buttons_layout.addWidget(apply_btn)
+        
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setObjectName("secondaryBtn")
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(buttons_layout)
+        
+        dialog.exec()
+    
+    def _on_preset_selected(self, dialog: QDialog, preset_list: QTableWidget, presets: list[NormalizationPreset]):
+        """Обработчик выбора пресета из списка."""
+        selected_rows = preset_list.selectedItems()
+        if not selected_rows:
+            QMessageBox.warning(self, "Предупреждение", "Выберите пресет!")
+            return
+        
+        row = selected_rows[0].row()
+        preset = presets[row]
+        self._apply_preset_values(preset, apply_immediately=True)
+        dialog.accept()
+    
+    def _show_process_and_preset_dialog(self):
+        """Показывает диалог выбора процесса и пресета когда нет выделения."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Выберите процесс и пресет")
+        dialog.setMinimumWidth(500)
+        dialog.setMinimumHeight(400)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Верхняя часть - выбор процесса
+        process_label = QLabel("🔍 Выберите процесс:")
+        layout.addWidget(process_label)
+        
+        process_search = QLineEdit()
+        process_search.setPlaceholderText("Поиск процесса...")
+        layout.addWidget(process_search)
+        
+        process_list = QTableWidget()
+        process_list.setColumnCount(4)
+        process_list.setHorizontalHeaderLabels(["Заголовок", "Позиция (X, Y)", "Размер (ШxВ)", "PID"])
+        process_list.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        process_list.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        process_list.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        layout.addWidget(process_list)
+        
+        # Нижняя часть - выбор пресета
+        preset_label = QLabel("📋 Выберите пресет:")
+        layout.addWidget(preset_label)
+        
+        preset_list_widget = QTableWidget()
+        preset_list_widget.setColumnCount(3)
+        preset_list_widget.setHorizontalHeaderLabels(["Имя", "Процесс", "Описание"])
+        preset_list_widget.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        preset_list_widget.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        preset_list_widget.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        layout.addWidget(preset_list_widget)
+        
+        # Загружаем процессы
+        def load_processes(search_text=""):
+            process_list.setRowCount(0)
+            windows = self.normalizer.search_windows(search_text)
+            for window in windows:
+                row = process_list.rowCount()
+                process_list.insertRow(row)
+                process_list.setItem(row, 0, QTableWidgetItem(window.title))
+                process_list.setItem(row, 1, QTableWidgetItem(f"{window.x}, {window.y}"))
+                process_list.setItem(row, 2, QTableWidgetItem(f"{window.width} x {window.height}"))
+                process_list.setItem(row, 3, QTableWidgetItem(str(window.pid or "N/A")))
+        
+        # Загружаем пресеты
+        def load_presets(search_text=""):
+            preset_list_widget.setRowCount(0)
+            all_presets = self.storage.search_presets(search_text)
+            for preset in all_presets:
+                row = preset_list_widget.rowCount()
+                preset_list_widget.insertRow(row)
+                preset_list_widget.setItem(row, 0, QTableWidgetItem(preset.name))
+                preset_list_widget.setItem(row, 1, QTableWidgetItem(preset.process_name))
+                preset_list_widget.setItem(row, 2, QTableWidgetItem(preset.description))
+        
+        load_processes()
+        load_presets()
+        
+        process_search.textChanged.connect(load_processes)
+        
+        # Кнопки
+        buttons_layout = QHBoxLayout()
+        
+        apply_btn = QPushButton("✓ Применить")
+        apply_btn.clicked.connect(lambda: self._on_process_and_preset_selected(
+            dialog, process_list, preset_list_widget))
+        buttons_layout.addWidget(apply_btn)
+        
+        cancel_btn = QPushButton("Отмена")
+        cancel_btn.setObjectName("secondaryBtn")
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(buttons_layout)
+        
+        dialog.exec()
+    
+    def _on_process_and_preset_selected(self, dialog: QDialog, 
+                                         process_list: QTableWidget, 
+                                         preset_list_widget: QTableWidget):
+        """Обработчик выбора процесса и пресета."""
+        process_selected = process_list.selectedItems()
+        preset_selected = preset_list_widget.selectedItems()
+        
+        if not process_selected:
+            QMessageBox.warning(self, "Предупреждение", "Выберите процесс!")
+            return
+        
+        if not preset_selected:
+            QMessageBox.warning(self, "Предупреждение", "Выберите пресет!")
+            return
+        
+        # Получаем данные выбранного процесса
+        process_row = process_selected[0].row()
+        process_title = process_list.item(process_row, 0).text()
+        
+        # Находим окно в списке по заголовку
+        target_window = None
+        for row in range(self.windows_table.rowCount()):
+            title = self.windows_table.item(row, 0).text()
+            if title == process_title:
+                # Выбираем это окно в таблице
+                self.windows_table.selectRow(row)
+                target_window = self.current_window
+                break
+        
+        if not target_window:
+            QMessageBox.warning(self, "Предупреждение", 
+                f"Окно '{process_title}' больше не доступно!")
+            return
+        
+        # Применяем пресет к полям
+        preset_row = preset_selected[0].row()
+        all_presets = self.storage.get_all_presets()
+        
+        # Находим соответствующий пресет (по индексу в отфильтрованном списке)
+        visible_presets = []
+        search_text = ""  # Можно добавить поиск
+        for preset in all_presets:
+            if not search_text or search_text.lower() in preset.name.lower() or \
+               search_text.lower() in preset.process_name.lower() or \
+               search_text.lower() in preset.description.lower():
+                visible_presets.append(preset)
+        
+        if preset_row < len(visible_presets):
+            preset = visible_presets[preset_row]
+            self._apply_preset_values(preset, apply_immediately=True)
+            dialog.accept()
 
 
 class ProcessPresetsWidget(QWidget):
