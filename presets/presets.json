@@ -1,0 +1,12 @@
+{
+  "tilesauto": {
+    "id": "tilesauto",
+    "name": "TilesAuto",
+    "process_name": "TilesSurvive",
+    "x": 10,
+    "y": 10,
+    "width": 900,
+    "height": 1020,
+    "description": "Расположение для бота"
+  }
+}
