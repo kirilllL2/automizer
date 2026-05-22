@@ -1268,12 +1268,38 @@ class ScreenshotsWidget(QWidget):
         screenshot = self._get_selected_screenshot()
         if screenshot and screenshot.path.exists():
             import subprocess
-            subprocess.Popen(["xdg-open", str(screenshot.path)])
+            import sys
+            import os
+            
+            path = str(screenshot.path)
+            
+            if sys.platform == 'win32':
+                # Windows: используем start
+                os.startfile(path)
+            elif sys.platform == 'darwin':
+                # macOS: используем open
+                subprocess.Popen(['open', path])
+            else:
+                # Linux: используем xdg-open
+                subprocess.Popen(['xdg-open', path])
     
     def _open_folder(self):
         """Открывает папку со скриншотами."""
         import subprocess
-        subprocess.Popen(["xdg-open", str(self.screenshot_manager.storage_path)])
+        import sys
+        import os
+        
+        path = str(self.screenshot_manager.storage_path)
+        
+        if sys.platform == 'win32':
+            # Windows: используем explorer
+            os.startfile(path)
+        elif sys.platform == 'darwin':
+            # macOS: используем open
+            subprocess.Popen(['open', path])
+        else:
+            # Linux: используем xdg-open
+            subprocess.Popen(['xdg-open', path])
     
     def _delete_screenshot(self):
         """Удаляет скриншот."""
