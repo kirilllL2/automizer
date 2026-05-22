@@ -61,3 +61,12 @@ screenshot:
   preview_duration: 1.0
   # Путь для хранения скриншотов (по умолчанию ~/.automizer/data/screenshots)
   storage_dir: "~/.automizer/data/screenshots"
+
+# Настройки компьютерного зрения (CV)
+cv:
+  # Порог уверенности для поиска совпадений (0.0 - 1.0)
+  confidence_threshold: 0.8
+  # Таймаут поиска в секундах
+  search_timeout: 5.0
+  # Длительность показа превью найденной области (в секундах)
+  preview_duration: 2.0
