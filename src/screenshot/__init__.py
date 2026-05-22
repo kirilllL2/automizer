@@ -15,7 +15,6 @@
 - `capture_with_preview(x, y, width, height, ...)` - сначала показывает превью, затем делает скриншот
 """
 
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -166,7 +165,7 @@ class ScreenshotManager:
         height: int,
     ) -> None:
         """
-        Показывает предварительный просмотр области выделения (красный квадрат).
+        Показывает предварительный просмотр области выделения (красная рамка).
 
         Киллер-фича: на короткое время отображает красный прямоугольник
         вокруг области, которая будет захвачена.
@@ -178,37 +177,57 @@ class ScreenshotManager:
             height: Высота области.
         """
         try:
-            import tkinter as tk
+            from PyQt6.QtWidgets import QApplication, QWidget
+            from PyQt6.QtCore import Qt, QTimer
+            from PyQt6.QtGui import QPainter, QPen, QBrush, QColor
+
+            # Создаем приложение если его нет
+            app = QApplication.instance()
+            if app is None:
+                app = QApplication([])
 
             # Создаем полноэкранное прозрачное окно
-            root = tk.Tk()
-            root.attributes("-fullscreen", True)
-            root.attributes("-topmost", True)
-            root.overrideredirect(True)
-            root.configure(bg="black")
-            root.wm_attributes("-alpha", 0.2)  # Полностью прозрачный фон
-
-            # Создаем Canvas на весь экран
-            canvas = tk.Canvas(root, bg="black", highlightthickness=0)
-            canvas.pack(fill=tk.BOTH, expand=True)
-
-            # Рисуем красный прямоугольник (рамку) вокруг целевой области
-            # Используем create_rectangle с outline (красная рамка) и fill (полупрозрачный красный)
-            canvas.create_rectangle(
-                x, y, x + width, y + height,
-                outline="red",
-                width=3,
-                fill="white"  # Узор для полупрозрачности
+            overlay = QWidget()
+            overlay.setWindowFlags(
+                Qt.WindowType.FramelessWindowHint |
+                Qt.WindowType.WindowStaysOnTopHint |
+                Qt.WindowType.Tool
             )
-
-            # Обновляем окно
-            root.update()
-
-            # Ждем указанное время
-            time.sleep(self._preview_duration)
-
-            # Закрываем окно
-            root.destroy()
+            overlay.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            overlay.setGeometry(0, 0, app.primaryScreen().geometry().width(),
+                               app.primaryScreen().geometry().height())
+            
+            # Сохраняем параметры для отрисовки
+            overlay.rect_params = (x, y, width, height)
+            
+            # Переопределяем метод paintEvent
+            original_paint_event = overlay.paintEvent
+            
+            def paint_event(event):
+                painter = QPainter(overlay)
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                
+                # Рисуем полупрозрачный фон
+                painter.fillRect(overlay.rect(), QColor(0, 0, 0, 50))
+                
+                # Рисуем красную рамку
+                pen = QPen(QColor(255, 0, 0), 3)
+                painter.setPen(pen)
+                brush = QBrush(QColor(255, 0, 0, 80))
+                painter.setBrush(brush)
+                
+                x, y, w, h = overlay.rect_params
+                painter.drawRect(x, y, w, h)
+            
+            overlay.paintEvent = paint_event
+            overlay.show()
+            
+            # Ждем указанное время и закрываем
+            QTimer.singleShot(int(self._preview_duration * 1000), overlay.close)
+            
+            # Запускаем цикл событий если нужно
+            if app == QApplication.instance():
+                app.processEvents()
 
         except Exception as e:
             # Если не удалось показать превью, просто продолжаем
