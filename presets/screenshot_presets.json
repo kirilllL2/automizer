@@ -128,5 +128,31 @@
     "description": "",
     "use_relative_coords": false,
     "window_id": 658294
+  },
+  "join_raid-send": {
+    "id": "join_raid-send",
+    "name": "join_raid-send",
+    "screenshot_path": "presets/screenshots/join_raid-send.png",
+    "process_preset_id": "tilesauto",
+    "x": 480,
+    "y": 767,
+    "width": 95,
+    "height": 30,
+    "description": "",
+    "use_relative_coords": false,
+    "window_id": null
+  },
+  "join_raid-all_sended": {
+    "id": "join_raid-all_sended",
+    "name": "join_raid-all_sended",
+    "screenshot_path": "presets/screenshots/join_raid-all_sended.png",
+    "process_preset_id": "tilesauto",
+    "x": 270,
+    "y": 790,
+    "width": 350,
+    "height": 30,
+    "description": "",
+    "use_relative_coords": false,
+    "window_id": null
   }
 }
