@@ -13,6 +13,29 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Any
 
+from src.macros.storage import Macro
+
+__all__ = [
+    'Macro',
+    'ActionType',
+    'ClickOffset',
+    'MacroAction',
+    'ClickAbsoluteAction',
+    'ClickRelativeAction',
+    'ClickImageAction',
+    'DelayAction',
+    'ConditionBranch',
+    'ConditionAction',
+    'LoopAction',
+    'GotoAction',
+    'StateCheckAction',
+    'NormalizeWindowAction',
+    'FocusWindowAction',
+    'TakeScreenshotAction',
+    'MacroActionType',
+    'action_from_dict',
+]
+
 
 class ActionType(Enum):
     """Типы действий в макросе."""

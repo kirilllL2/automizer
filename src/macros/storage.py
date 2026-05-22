@@ -5,9 +5,10 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any
+from typing import Optional, Any, TYPE_CHECKING
 
-from src.macros import MacroAction, action_from_dict, ActionType
+if TYPE_CHECKING:
+    from src.macros import MacroAction, ActionType
 
 
 class Macro:
@@ -18,7 +19,7 @@ class Macro:
         macro_id: str,
         name: str,
         description: str = "",
-        actions: Optional[list[MacroAction]] = None,
+        actions: Optional[list] = None,  # list[MacroAction] but avoid forward ref issues
     ):
         self.id = macro_id
         self.name = name
@@ -27,7 +28,7 @@ class Macro:
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
     
-    def add_action(self, action: MacroAction, index: Optional[int] = None) -> None:
+    def add_action(self, action, index: Optional[int] = None) -> None:
         """Добавляет действие в макрос."""
         if index is not None:
             self.actions.insert(index, action)
@@ -44,14 +45,14 @@ class Macro:
                 return True
         return False
     
-    def get_action_by_id(self, action_id: str) -> Optional[MacroAction]:
+    def get_action_by_id(self, action_id: str):
         """Получает действие по ID."""
         for action in self.actions:
             if action.id == action_id:
                 return action
         return None
     
-    def get_action_by_label(self, label: str) -> Optional[MacroAction]:
+    def get_action_by_label(self, label: str):
         """Получает первое действие с указанным label."""
         for action in self.actions:
             if action.label == label:
@@ -80,6 +81,9 @@ class Macro:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Macro":
         """Десериализует макрос из словаря."""
+        # Import here to avoid circular dependency
+        from src.macros import action_from_dict
+        
         macro = cls(
             macro_id=data["id"],
             name=data["name"],
