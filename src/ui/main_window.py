@@ -8,14 +8,15 @@
 """
 
 from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget,
     QLabel, QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QScrollArea, QGridLayout, QSpacerItem,
     QSizePolicy, QMessageBox, QFileDialog, QDialog, QDialogButtonBox,
-    QFormLayout, QSpinBox, QComboBox
+    QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect,
+    QPropertyAnimation, QEasingCurve
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize
-from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation
+from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
 
 from src.normalizer import ProcessNormalizer, NormalizationPreset
 from src.window_manager import WindowManager, WindowInfo
@@ -56,28 +57,33 @@ def apply_modern_style(widget):
             font-size: 14px;
         }}
         
-        QTabWidget::pane {{
-            border: 1px solid {ModernStyle.BORDER};
-            border-radius: {ModernStyle.BORDER_RADIUS}px;
+        /* Боковая панель */
+        QFrame#sidebar {{
             background-color: {ModernStyle.BG_SECONDARY};
+            border-right: 1px solid {ModernStyle.BORDER};
         }}
         
-        QTabBar::tab {{
-            background-color: {ModernStyle.BG_SECONDARY};
+        /* Кнопки навигации */
+        QPushButton#navBtn {{
+            background-color: transparent;
             color: {ModernStyle.TEXT_SECONDARY};
-            padding: 12px 24px;
-            margin-right: 4px;
-            border-top-left-radius: {ModernStyle.BORDER_RADIUS}px;
-            border-top-right-radius: {ModernStyle.BORDER_RADIUS}px;
+            border: none;
+            border-radius: {ModernStyle.BORDER_RADIUS}px;
+            padding: 16px 20px;
+            text-align: left;
+            font-weight: bold;
+            font-size: 15px;
+            margin: 4px 8px;
         }}
         
-        QTabBar::tab:selected {{
-            background-color: {ModernStyle.ACCENT};
+        QPushButton#navBtn:hover {{
+            background-color: {ModernStyle.BG_HOVER};
             color: {ModernStyle.TEXT_PRIMARY};
         }}
         
-        QTabBar::tab:hover:!selected {{
-            background-color: {ModernStyle.BG_HOVER};
+        QPushButton#navBtn:checked {{
+            background-color: {ModernStyle.ACCENT};
+            color: {ModernStyle.TEXT_PRIMARY};
         }}
         
         QPushButton {{
@@ -259,6 +265,17 @@ def apply_modern_style(widget):
     widget.setStyleSheet(style)
 
 
+class SidebarButton(QPushButton):
+    """Кнопка боковой панели с анимацией."""
+    
+    def __init__(self, icon: str, text: str, parent=None):
+        super().__init__(f"{icon}  {text}", parent)
+        self.setObjectName("navBtn")
+        self.setCheckable(True)
+        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setMinimumHeight(50)
+
+
 class WindowSelectionWidget(QWidget):
     """Виджет выбора и настройки окна (вкладка 1)."""
     
@@ -344,52 +361,6 @@ class WindowSelectionWidget(QWidget):
         coords_layout.addWidget(self.height_input, 1, 3)
         
         settings_layout.addLayout(coords_layout)
-        
-        # Пресеты позиционирования
-        presets_label = QLabel("📐 Быстрые пресеты:")
-        presets_label.setObjectName("sectionTitle")
-        settings_layout.addWidget(presets_label)
-        
-        presets_layout = QHBoxLayout()
-        presets_layout.setSpacing(8)
-        
-        self.half_left_btn = QPushButton("◫ Половина слева")
-        self.half_left_btn.setObjectName("secondaryBtn")
-        self.half_left_btn.clicked.connect(lambda: self._apply_preset("half_left"))
-        presets_layout.addWidget(self.half_left_btn)
-        
-        self.half_right_btn = QPushButton("◪ Половина справа")
-        self.half_right_btn.setObjectName("secondaryBtn")
-        self.half_right_btn.clicked.connect(lambda: self._apply_preset("half_right"))
-        presets_layout.addWidget(self.half_right_btn)
-        
-        self.quarter_tl_btn = QPushButton("⊞ Четверть ВЛ")
-        self.quarter_tl_btn.setObjectName("secondaryBtn")
-        self.quarter_tl_btn.clicked.connect(lambda: self._apply_preset("quarter_tl"))
-        presets_layout.addWidget(self.quarter_tl_btn)
-        
-        self.quarter_tr_btn = QPushButton("⊞ Четверть ВП")
-        self.quarter_tr_btn.setObjectName("secondaryBtn")
-        self.quarter_tr_btn.clicked.connect(lambda: self._apply_preset("quarter_tr"))
-        presets_layout.addWidget(self.quarter_tr_btn)
-        
-        self.quarter_bl_btn = QPushButton("⊞ Четверть НЛ")
-        self.quarter_bl_btn.setObjectName("secondaryBtn")
-        self.quarter_bl_btn.clicked.connect(lambda: self._apply_preset("quarter_bl"))
-        presets_layout.addWidget(self.quarter_bl_btn)
-        
-        self.quarter_br_btn = QPushButton("⊞ Четверть НП")
-        self.quarter_br_btn.setObjectName("secondaryBtn")
-        self.quarter_br_btn.clicked.connect(lambda: self._apply_preset("quarter_br"))
-        presets_layout.addWidget(self.quarter_br_btn)
-        
-        self.full_screen_btn = QPushButton("⛶ Полный экран")
-        self.full_screen_btn.setObjectName("secondaryBtn")
-        self.full_screen_btn.clicked.connect(lambda: self._apply_preset("fullscreen"))
-        presets_layout.addWidget(self.full_screen_btn)
-        
-        presets_layout.addStretch()
-        settings_layout.addLayout(presets_layout)
         
         # Кнопки действий
         buttons_layout = QHBoxLayout()
@@ -1315,7 +1286,7 @@ class ScreenshotPresetDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    """Главное окно приложения Automizer."""
+    """Главное окно приложения Automizer с боковой панелью навигации."""
     
     def __init__(self):
         super().__init__()
@@ -1331,7 +1302,7 @@ class MainWindow(QMainWindow):
         self._apply_styling()
     
     def _setup_ui(self):
-        """Настраивает пользовательский интерфейс."""
+        """Настраивает пользовательский интерфейс с боковой панелью."""
         self.setWindowTitle("Automizer - Система нормализации окон")
         self.setMinimumSize(1200, 800)
         
@@ -1339,28 +1310,70 @@ class MainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        main_layout = QVBoxLayout(central_widget)
+        # Основной макет горизонтальный
+        main_layout = QHBoxLayout(central_widget)
         main_layout.setSpacing(0)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Вкладки
-        self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
-        self.tabs.setMovable(False)
+        # Боковая панель
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("sidebar")
+        self.sidebar.setFixedWidth(250)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setSpacing(8)
+        sidebar_layout.setContentsMargins(8, 20, 8, 20)
+        
+        # Заголовок приложения
+        app_title = QLabel("🎯 Automizer")
+        app_title.setObjectName("titleLabel")
+        app_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        app_title.setStyleSheet("font-size: 28px; margin-bottom: 30px;")
+        sidebar_layout.addWidget(app_title)
+        
+        sidebar_layout.addSpacing(20)
+        
+        # Кнопки навигации
+        self.nav_buttons = []
+        
+        self.btn_window_selection = SidebarButton("🪟", "Выбор процесса")
+        self.btn_window_selection.setChecked(True)
+        sidebar_layout.addWidget(self.btn_window_selection)
+        self.nav_buttons.append(self.btn_window_selection)
+        
+        self.btn_process_presets = SidebarButton("📋", "Пресеты процессов")
+        sidebar_layout.addWidget(self.btn_process_presets)
+        self.nav_buttons.append(self.btn_process_presets)
+        
+        self.btn_screenshots = SidebarButton("📸", "Скриншоты")
+        sidebar_layout.addWidget(self.btn_screenshots)
+        self.nav_buttons.append(self.btn_screenshots)
+        
+        self.btn_screenshot_presets = SidebarButton("🎬", "Пресеты скриншотов")
+        sidebar_layout.addWidget(self.btn_screenshot_presets)
+        self.nav_buttons.append(self.btn_screenshot_presets)
+        
+        sidebar_layout.addStretch()
+        
+        # Добавляем боковую панель в основной макет
+        main_layout.addWidget(self.sidebar)
+        
+        # Область контента (стек виджетов)
+        self.content_stack = QStackedWidget()
+        self.content_stack.setContentsMargins(0, 0, 0, 0)
         
         # Вкладка 1: Выбор процесса
         self.window_selection = WindowSelectionWidget(self.normalizer)
-        self.tabs.addTab(self.window_selection, "🪟 Выбор процесса")
+        self.content_stack.addWidget(self.window_selection)
         
         # Вкладка 2: Пресеты процессов
         self.process_presets = ProcessPresetsWidget(
             self.preset_storage, self.normalizer
         )
-        self.tabs.addTab(self.process_presets, "📋 Пресеты процессов")
+        self.content_stack.addWidget(self.process_presets)
         
         # Вкладка 3: Скриншоты
         self.screenshots = ScreenshotsWidget(self.screenshot_manager)
-        self.tabs.addTab(self.screenshots, "📸 Скриншоты")
+        self.content_stack.addWidget(self.screenshots)
         
         # Вкладка 4: Пресеты скриншотов
         self.screenshot_presets = ScreenshotPresetsWidget(
@@ -1369,9 +1382,27 @@ class MainWindow(QMainWindow):
             self.screenshot_manager,
             self.normalizer
         )
-        self.tabs.addTab(self.screenshot_presets, "🎬 Пресеты скриншотов")
+        self.content_stack.addWidget(self.screenshot_presets)
         
-        main_layout.addWidget(self.tabs)
+        main_layout.addWidget(self.content_stack)
+        
+        # Подключаем кнопки навигации
+        self.btn_window_selection.clicked.connect(lambda: self._switch_tab(0))
+        self.btn_process_presets.clicked.connect(lambda: self._switch_tab(1))
+        self.btn_screenshots.clicked.connect(lambda: self._switch_tab(2))
+        self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(3))
+    
+    def _switch_tab(self, index: int):
+        """Переключает вкладку и обновляет состояние кнопок."""
+        # Сбрасываем все кнопки
+        for btn in self.nav_buttons:
+            btn.setChecked(False)
+        
+        # Активируем нужную кнопку
+        self.nav_buttons[index].setChecked(True)
+        
+        # Переключаем стек
+        self.content_stack.setCurrentIndex(index)
     
     def _apply_styling(self):
         """Применяет современный стиль."""
