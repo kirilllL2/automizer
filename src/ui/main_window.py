@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QFrame, QScrollArea, QGridLayout, QSpacerItem,
     QSizePolicy, QMessageBox, QFileDialog, QDialog, QDialogButtonBox,
     QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect, QCheckBox,
-    QDoubleSpinBox
+    QDoubleSpinBox, QProgressBar
 )
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
