@@ -596,9 +596,7 @@ class WindowSelectionWidget(QWidget):
             elif len(matching_presets) == 1:
                 # Найден один пресет - применяем сразу
                 preset = matching_presets[0]
-                self._apply_preset_values(preset)
-                QMessageBox.information(self, "Успех", 
-                    f"Пресет '{preset.name}' применен!\nНажмите '✓ Применить к окну' для активации.")
+                self._apply_preset_values(preset, apply_immediately=True)
             else:
                 # Найдено несколько пресетов - даем выбрать
                 self._show_preset_selection_dialog(title, matching_presets)
@@ -606,12 +604,16 @@ class WindowSelectionWidget(QWidget):
             # Нет выделенного окна - просим выбрать процесс и пресет
             self._show_process_and_preset_dialog()
     
-    def _apply_preset_values(self, preset: NormalizationPreset):
-        """Устанавливает значения из пресета в поля ввода."""
+    def _apply_preset_values(self, preset: NormalizationPreset, apply_immediately: bool = True):
+        """Устанавливает значения из пресета в поля ввода и применяет к окну."""
         self.x_input.setValue(preset.x)
         self.y_input.setValue(preset.y)
         self.width_input.setValue(preset.width)
         self.height_input.setValue(preset.height)
+        
+        # Если окно выбрано и нужно применить сразу - применяем
+        if apply_immediately and self.current_window:
+            self._apply_to_window()
     
     def _show_preset_selection_dialog(self, process_title: str, presets: list[NormalizationPreset]):
         """Показывает диалог выбора пресета при наличии нескольких вариантов."""
@@ -666,10 +668,8 @@ class WindowSelectionWidget(QWidget):
         
         row = selected_rows[0].row()
         preset = presets[row]
-        self._apply_preset_values(preset)
+        self._apply_preset_values(preset, apply_immediately=True)
         dialog.accept()
-        QMessageBox.information(self, "Успех", 
-            f"Пресет '{preset.name}' применен!\nНажмите '✓ Применить к окну' для активации.")
     
     def _show_process_and_preset_dialog(self):
         """Показывает диалог выбора процесса и пресета когда нет выделения."""
@@ -768,6 +768,25 @@ class WindowSelectionWidget(QWidget):
             QMessageBox.warning(self, "Предупреждение", "Выберите пресет!")
             return
         
+        # Получаем данные выбранного процесса
+        process_row = process_selected[0].row()
+        process_title = process_list.item(process_row, 0).text()
+        
+        # Находим окно в списке по заголовку
+        target_window = None
+        for row in range(self.windows_table.rowCount()):
+            title = self.windows_table.item(row, 0).text()
+            if title == process_title:
+                # Выбираем это окно в таблице
+                self.windows_table.selectRow(row)
+                target_window = self.current_window
+                break
+        
+        if not target_window:
+            QMessageBox.warning(self, "Предупреждение", 
+                f"Окно '{process_title}' больше не доступно!")
+            return
+        
         # Применяем пресет к полям
         preset_row = preset_selected[0].row()
         all_presets = self.storage.get_all_presets()
@@ -783,10 +802,8 @@ class WindowSelectionWidget(QWidget):
         
         if preset_row < len(visible_presets):
             preset = visible_presets[preset_row]
-            self._apply_preset_values(preset)
+            self._apply_preset_values(preset, apply_immediately=True)
             dialog.accept()
-            QMessageBox.information(self, "Успех", 
-                f"Пресет '{preset.name}' применен!\nТеперь выберите процесс и нажмите '✓ Применить к окну'.")
 
 
 class ProcessPresetsWidget(QWidget):
