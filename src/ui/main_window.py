@@ -1317,6 +1317,8 @@ class ScreenshotPresetsWidget(QWidget):
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
+            # Удаляем preset_id из data, т.к. он передается отдельно
+            data.pop("preset_id", None)
             self.preset_storage.update_preset(preset_id=preset.id, **data)
             self._load_presets()
             QMessageBox.information(self, "Успех", "Пресет обновлен!")
