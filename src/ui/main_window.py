@@ -1865,7 +1865,14 @@ class ScreenshotPresetDialog(QDialog):
         if use_relative_coords and process_preset_id and self.process_storage:
             process_preset = self.process_storage.get_preset(process_preset_id)
             if process_preset:
-                window_id = process_preset.window_id
+                # Ищем окно по имени процесса из пресета нормализации (используем WindowManager)
+                from src.window_manager import WindowManager
+                window_manager = WindowManager()
+                windows = window_manager.get_windows()
+                for window in windows:
+                    if process_preset.process_name.lower() in window.title.lower():
+                        window_id = window.hwnd
+                        break
         
         return {
             "preset_id": preset_id,
