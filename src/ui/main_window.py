@@ -1,9 +1,8 @@
 """
 Главное окно приложения Automizer.
-Современный красивый резиновый интерфейс с 3 вкладками:
+Современный красивый резиновый интерфейс с 2 вкладками:
 1. Выбор процесса - выбор окна и настройка позиции/размеров
-2. Скриншоты - управление созданными скриншотами
-3. Пресеты скриншотов - управление пресетами скриншотов и быстрый захват
+2. Пресеты скриншотов - управление пресетами скриншотов (скриншот создается автоматически)
 """
 
 from PyQt6.QtWidgets import (
@@ -19,7 +18,7 @@ from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
 from src.normalizer import ProcessNormalizer, NormalizationPreset
 from src.window_manager import WindowManager, WindowInfo
 from src.storage import PresetStorage
-from src.screenshot import ScreenshotManager, ScreenshotInfo
+from src.screenshot import ScreenshotManager
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
@@ -1150,177 +1149,8 @@ class PresetDialog(QDialog):
         }
 
 
-class ScreenshotsWidget(QWidget):
-    """Виджет управления скриншотами (вкладка 3)."""
-    
-    def __init__(self, screenshot_manager: ScreenshotManager):
-        super().__init__()
-        self.screenshot_manager = screenshot_manager
-        self._setup_ui()
-    
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(ModernStyle.SPACING)
-        layout.setContentsMargins(ModernStyle.PADDING, ModernStyle.PADDING,
-                                   ModernStyle.PADDING, ModernStyle.PADDING)
-        
-        # Заголовок
-        title = QLabel("📸 Скриншоты")
-        title.setObjectName("titleLabel")
-        layout.addWidget(title)
-        
-        # Поиск
-        search_layout = QHBoxLayout()
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Поиск скриншотов...")
-        self.search_input.textChanged.connect(self._search_screenshots)
-        search_layout.addWidget(self.search_input)
-        layout.addLayout(search_layout)
-        
-        # Таблица скриншотов
-        self.screenshots_table = QTableWidget()
-        self.screenshots_table.setColumnCount(4)
-        self.screenshots_table.setHorizontalHeaderLabels([
-            "ID", "Описание", "Размер области", "Дата создания"
-        ])
-        self.screenshots_table.horizontalHeader().setSectionResizeMode(
-            0, QHeaderView.ResizeMode.Stretch
-        )
-        self.screenshots_table.setSelectionBehavior(
-            QTableWidget.SelectionBehavior.SelectRows
-        )
-        self.screenshots_table.setSelectionMode(
-            QTableWidget.SelectionMode.SingleSelection
-        )
-        self.screenshots_table.cellDoubleClicked.connect(self._open_screenshot)
-        layout.addWidget(self.screenshots_table)
-        
-        # Кнопки действий
-        buttons_layout = QHBoxLayout()
-        buttons_layout.setSpacing(12)
-        
-        self.open_folder_btn = QPushButton("📁 Открыть папку")
-        self.open_folder_btn.setObjectName("secondaryBtn")
-        self.open_folder_btn.clicked.connect(self._open_folder)
-        buttons_layout.addWidget(self.open_folder_btn)
-        
-        self.delete_btn = QPushButton("🗑️ Удалить")
-        self.delete_btn.setObjectName("dangerBtn")
-        self.delete_btn.clicked.connect(self._delete_screenshot)
-        buttons_layout.addWidget(self.delete_btn)
-        
-        buttons_layout.addStretch()
-        layout.addLayout(buttons_layout)
-        
-        # Загружаем скриншоты
-        self._load_screenshots()
-    
-    def _load_screenshots(self):
-        """Загружает скриншоты в таблицу."""
-        self.screenshots_table.setRowCount(0)
-        screenshots = self.screenshot_manager.get_all_screenshots()
-        
-        for shot in screenshots:
-            row = self.screenshots_table.rowCount()
-            self.screenshots_table.insertRow(row)
-            
-            item = QTableWidgetItem(shot.id)
-            item.setData(Qt.ItemDataRole.UserRole, shot.id)
-            self.screenshots_table.setItem(row, 0, item)
-            
-            self.screenshots_table.setItem(row, 1, QTableWidgetItem(shot.description or "—"))
-            self.screenshots_table.setItem(row, 2, QTableWidgetItem(f"{shot.width} x {shot.height}"))
-            self.screenshots_table.setItem(row, 3, QTableWidgetItem(
-                shot.created_at.strftime("%d.%m.%Y %H:%M")
-            ))
-    
-    def _search_screenshots(self, text: str):
-        """Ищет скриншоты."""
-        self.screenshots_table.setRowCount(0)
-        screenshots = self.screenshot_manager.search_screenshots(text)
-        
-        for shot in screenshots:
-            row = self.screenshots_table.rowCount()
-            self.screenshots_table.insertRow(row)
-            
-            item = QTableWidgetItem(shot.id)
-            item.setData(Qt.ItemDataRole.UserRole, shot.id)
-            self.screenshots_table.setItem(row, 0, item)
-            
-            self.screenshots_table.setItem(row, 1, QTableWidgetItem(shot.description or "—"))
-            self.screenshots_table.setItem(row, 2, QTableWidgetItem(f"{shot.width} x {shot.height}"))
-            self.screenshots_table.setItem(row, 3, QTableWidgetItem(
-                shot.created_at.strftime("%d.%m.%Y %H:%M")
-            ))
-    
-    def _get_selected_screenshot(self) -> ScreenshotInfo | None:
-        """Получает выбранный скриншот."""
-        selected_rows = self.screenshots_table.selectedItems()
-        if not selected_rows:
-            return None
-        
-        row = selected_rows[0].row()
-        screenshot_id = self.screenshots_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        return self.screenshot_manager.get_screenshot(screenshot_id)
-    
-    def _open_screenshot(self, row: int, column: int):
-        """Открывает скриншот."""
-        screenshot = self._get_selected_screenshot()
-        if screenshot and screenshot.path.exists():
-            import subprocess
-            import sys
-            import os
-            
-            path = str(screenshot.path)
-            
-            if sys.platform == 'win32':
-                # Windows: используем start
-                os.startfile(path)
-            elif sys.platform == 'darwin':
-                # macOS: используем open
-                subprocess.Popen(['open', path])
-            else:
-                # Linux: используем xdg-open
-                subprocess.Popen(['xdg-open', path])
-    
-    def _open_folder(self):
-        """Открывает папку со скриншотами."""
-        import subprocess
-        import sys
-        import os
-        
-        path = str(self.screenshot_manager.storage_path)
-        
-        if sys.platform == 'win32':
-            # Windows: используем explorer
-            os.startfile(path)
-        elif sys.platform == 'darwin':
-            # macOS: используем open
-            subprocess.Popen(['open', path])
-        else:
-            # Linux: используем xdg-open
-            subprocess.Popen(['xdg-open', path])
-    
-    def _delete_screenshot(self):
-        """Удаляет скриншот."""
-        screenshot = self._get_selected_screenshot()
-        if not screenshot:
-            QMessageBox.warning(self, "Предупреждение", "Выберите скриншот!")
-            return
-        
-        reply = QMessageBox.question(
-            self, "Подтверждение",
-            f"Удалить скриншот '{screenshot.id}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            self.screenshot_manager.remove_screenshot(screenshot.id)
-            self._load_screenshots()
-
-
 class ScreenshotPresetsWidget(QWidget):
-    """Виджет управления пресетами скриншотов (вкладка 4)."""
+    """Виджет управления пресетами скриншотов (вкладка с автоскриншотами)."""
     
     def __init__(self, 
                  preset_storage: ScreenshotPresetStorage,
@@ -1341,7 +1171,7 @@ class ScreenshotPresetsWidget(QWidget):
                                    ModernStyle.PADDING, ModernStyle.PADDING)
         
         # Заголовок
-        title = QLabel("🎬 Пресеты скриншотов и быстрый захват")
+        title = QLabel("🎬 Пресеты скриншотов")
         title.setObjectName("titleLabel")
         layout.addWidget(title)
         
@@ -1368,6 +1198,7 @@ class ScreenshotPresetsWidget(QWidget):
         self.presets_table.setSelectionMode(
             QTableWidget.SelectionMode.SingleSelection
         )
+        self.presets_table.cellDoubleClicked.connect(self._open_screenshot_folder)
         layout.addWidget(self.presets_table)
         
         # Кнопки действий
@@ -1388,73 +1219,16 @@ class ScreenshotPresetsWidget(QWidget):
         self.delete_btn.clicked.connect(self._delete_preset)
         buttons_layout.addWidget(self.delete_btn)
         
+        self.refresh_btn = QPushButton("🔄 Обновить скриншот")
+        self.refresh_btn.setObjectName("successBtn")
+        self.refresh_btn.clicked.connect(self._refresh_screenshot)
+        buttons_layout.addWidget(self.refresh_btn)
+        
         buttons_layout.addStretch()
         layout.addLayout(buttons_layout)
         
-        # Секция быстрого захвата
-        capture_card = QFrame()
-        capture_card.setObjectName("card")
-        capture_layout = QVBoxLayout(capture_card)
-        
-        capture_title = QLabel("⚡ Быстрый захват")
-        capture_title.setObjectName("sectionTitle")
-        capture_layout.addWidget(capture_title)
-        
-        # Выбор пресетов
-        select_layout = QHBoxLayout()
-        select_layout.setSpacing(16)
-        
-        self.process_preset_combo = QComboBox()
-        self.process_preset_combo.addItem("Выберите пресет процесса...", "")
-        self._update_process_presets()
-        select_layout.addWidget(QLabel("Пресет процесса:"))
-        select_layout.addWidget(self.process_preset_combo)
-        
-        self.screenshot_preset_combo = QComboBox()
-        self.screenshot_preset_combo.addItem("Выберите пресет скриншота...", "")
-        self._update_screenshot_presets()
-        select_layout.addWidget(QLabel("Пресет скриншота:"))
-        select_layout.addWidget(self.screenshot_preset_combo)
-        
-        capture_layout.addLayout(select_layout)
-        
-        # Кнопки захвата
-        capture_buttons = QHBoxLayout()
-        capture_buttons.setSpacing(12)
-        
-        self.capture_only_btn = QPushButton("📸 Только скриншот")
-        self.capture_only_btn.setObjectName("secondaryBtn")
-        self.capture_only_btn.clicked.connect(self._capture_screenshot_only)
-        capture_buttons.addWidget(self.capture_only_btn)
-        
-        self.full_capture_btn = QPushButton("🎯 Полный захват (нормализация + скриншот)")
-        self.full_capture_btn.setObjectName("successBtn")
-        self.full_capture_btn.clicked.connect(self._full_capture)
-        capture_buttons.addWidget(self.full_capture_btn)
-        
-        capture_buttons.addStretch()
-        capture_layout.addLayout(capture_buttons)
-        
-        layout.addWidget(capture_card)
-        
         # Загружаем пресеты
         self._load_presets()
-    
-    def _update_process_presets(self):
-        """Обновляет список пресетов процессов."""
-        self.process_preset_combo.clear()
-        self.process_preset_combo.addItem("Выберите пресет процесса...", "")
-        
-        for preset in self.process_storage.get_all_presets():
-            self.process_preset_combo.addItem(preset.name, preset.id)
-    
-    def _update_screenshot_presets(self):
-        """Обновляет список пресетов скриншотов."""
-        self.screenshot_preset_combo.clear()
-        self.screenshot_preset_combo.addItem("Выберите пресет скриншота...", "")
-        
-        for preset in self.preset_storage.get_all_presets():
-            self.screenshot_preset_combo.addItem(preset.name, preset.id)
     
     def _load_presets(self):
         """Загружает пресеты в таблицу."""
@@ -1513,10 +1287,20 @@ class ScreenshotPresetsWidget(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
             try:
-                self.preset_storage.add_preset(**data)
+                # Проверяем: если пресет привязан к процессу, нормализуем его сначала
+                if data["process_preset_id"]:
+                    process_preset = self.process_storage.get_preset(data["process_preset_id"])
+                    if process_preset:
+                        # Нормализуем окно процесса перед созданием скриншота
+                        self.normalizer.apply_preset(process_preset)
+                
+                self.preset_storage.add_preset(
+                    **data,
+                    screenshot_manager=self.screenshot_manager,
+                    window_manager=self.normalizer.window_manager,
+                )
                 self._load_presets()
-                self._update_screenshot_presets()
-                QMessageBox.information(self, "Успех", "Пресет добавлен!")
+                QMessageBox.information(self, "Успех", "Пресет добавлен и скриншот создан!")
             except ValueError as e:
                 QMessageBox.critical(self, "Ошибка", str(e))
     
@@ -1535,7 +1319,6 @@ class ScreenshotPresetsWidget(QWidget):
             data = dialog.get_data()
             self.preset_storage.update_preset(preset_id=preset.id, **data)
             self._load_presets()
-            self._update_screenshot_presets()
             QMessageBox.information(self, "Успех", "Пресет обновлен!")
     
     def _delete_preset(self):
@@ -1554,91 +1337,76 @@ class ScreenshotPresetsWidget(QWidget):
         if reply == QMessageBox.StandardButton.Yes:
             self.preset_storage.remove_preset(preset.id)
             self._load_presets()
-            self._update_screenshot_presets()
     
-    def _capture_screenshot_only(self):
-        """Создает скриншот только по пресету."""
-        preset_id = self.screenshot_preset_combo.currentData()
-        if not preset_id:
-            QMessageBox.warning(self, "Предупреждение", "Выберите пресет скриншота!")
-            return
-        
-        preset = self.preset_storage.get_preset(preset_id)
+    def _refresh_screenshot(self):
+        """Обновляет скриншот для выбранного пресета."""
+        preset = self._get_selected_preset()
         if not preset:
+            QMessageBox.warning(self, "Предупреждение", "Выберите пресет!")
             return
         
-        # Для относительных координат нужно найти окно процесса и передать window_manager
-        window_manager = None
-        if preset.use_relative_coords and preset.process_preset_id:
-            # Находим окно по пресету процесса
+        # Если пресет привязан к процессу, сначала нормализуем его
+        if preset.process_preset_id:
             process_preset = self.process_storage.get_preset(preset.process_preset_id)
             if process_preset:
-                # Ищем окно с помощью normalizer
-                windows = self.normalizer.search_windows(process_preset.process_name)
-                if windows:
-                    # Получаем window_id из первого найденного окна
-                    window_info = self.normalizer.window_manager.get_windows()
-                    for win in window_info:
-                        if process_preset.process_name.lower() in win.title.lower():
-                            # Обновляем window_id в пресете для захвата
-                            preset.window_id = win.window_id
-                            break
-                    window_manager = self.normalizer.window_manager
+                success = self.normalizer.apply_preset(process_preset)
+                if not success:
+                    QMessageBox.critical(self, "Ошибка", "Не удалось применить пресет процесса!")
+                    return
+            else:
+                QMessageBox.critical(self, "Ошибка", "Пресет процесса не найден!")
+                return
         
-        # Используем capture_with_preset для сохранения по пути из пресета
+        # Для относительных координат обновляем window_id из текущего окна
+        if preset.use_relative_coords:
+            windows = self.normalizer.window_manager.get_windows()
+            process_name = ""
+            if preset.process_preset_id:
+                process_preset = self.process_storage.get_preset(preset.process_preset_id)
+                if process_preset:
+                    process_name = process_preset.process_name
+            
+            for win in windows:
+                if not process_name or process_name.lower() in win.title.lower():
+                    preset.window_id = win.window_id
+                    break
+        
+        # Создаем скриншот с использованием пресета
         self.preset_storage.capture_with_preset(
             preset=preset,
             screenshot_manager=self.screenshot_manager,
-            window_manager=window_manager,
+            window_manager=self.normalizer.window_manager if preset.use_relative_coords else None,
         )
-        QMessageBox.information(self, "Успех", f"Скриншот сохранен в: {preset.screenshot_path}")
+        
+        QMessageBox.information(self, "Успех", f"Скриншот обновлен! Сохранен в: {preset.screenshot_path}")
     
-    def _full_capture(self):
-        """Выполняет полный захват: нормализация + скриншот."""
-        process_preset_id = self.process_preset_combo.currentData()
-        screenshot_preset_id = self.screenshot_preset_combo.currentData()
-        
-        if not process_preset_id:
-            QMessageBox.warning(self, "Предупреждение", "Выберите пресет процесса!")
+    def _open_screenshot_folder(self, row: int, column: int):
+        """Открывает папку со скриншотом при двойном клике."""
+        preset = self._get_selected_preset()
+        if not preset:
             return
         
-        if not screenshot_preset_id:
-            QMessageBox.warning(self, "Предупреждение", "Выберите пресет скриншота!")
+        import subprocess
+        import sys
+        import os
+        
+        # Получаем директорию файла скриншота
+        screenshot_path = preset.screenshot_path
+        if not screenshot_path:
+            QMessageBox.warning(self, "Предупреждение", "Путь к скриншоту не указан!")
             return
         
-        # Применяем пресет процесса
-        process_preset = self.process_storage.get_preset(process_preset_id)
-        if not process_preset:
-            QMessageBox.critical(self, "Ошибка", "Пресет процесса не найден!")
+        path = os.path.dirname(screenshot_path)
+        if not os.path.exists(path):
+            QMessageBox.warning(self, "Предупреждение", f"Папка не найдена: {path}")
             return
         
-        success = self.normalizer.apply_preset(process_preset)
-        if not success:
-            QMessageBox.critical(self, "Ошибка", "Не удалось применить пресет процесса!")
-            return
-        
-        # Создаем скриншот с использованием пресета (сохранение по пути из пресета)
-        screenshot_preset = self.preset_storage.get_preset(screenshot_preset_id)
-        if not screenshot_preset:
-            QMessageBox.critical(self, "Ошибка", "Пресет скриншота не найден!")
-            return
-        
-        # Для относительных координат обновляем window_id из текущего окна
-        if screenshot_preset.use_relative_coords:
-            # Ищем окно после применения пресета
-            windows = self.normalizer.window_manager.get_windows()
-            for win in windows:
-                if process_preset.process_name.lower() in win.title.lower():
-                    screenshot_preset.window_id = win.window_id
-                    break
-        
-        self.preset_storage.capture_with_preset(
-            preset=screenshot_preset,
-            screenshot_manager=self.screenshot_manager,
-            window_manager=self.normalizer.window_manager if screenshot_preset.use_relative_coords else None,
-        )
-        
-        QMessageBox.information(self, "Успех", f"Полный захват выполнен! Скриншот сохранен в: {screenshot_preset.screenshot_path}")
+        if sys.platform == 'win32':
+            os.startfile(path)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', path])
+        else:
+            subprocess.Popen(['xdg-open', path])
 
 
 class ScreenshotPresetDialog(QDialog):
@@ -1970,10 +1738,6 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.btn_window_selection)
         self.nav_buttons.append(self.btn_window_selection)
         
-        self.btn_screenshots = SidebarButton("📸", "Скриншоты")
-        sidebar_layout.addWidget(self.btn_screenshots)
-        self.nav_buttons.append(self.btn_screenshots)
-        
         self.btn_screenshot_presets = SidebarButton("🎬", "Пресеты скриншотов")
         sidebar_layout.addWidget(self.btn_screenshot_presets)
         self.nav_buttons.append(self.btn_screenshot_presets)
@@ -1993,11 +1757,7 @@ class MainWindow(QMainWindow):
         )
         self.content_stack.addWidget(self.window_selection)
         
-        # Вкладка 2: Скриншоты
-        self.screenshots = ScreenshotsWidget(self.screenshot_manager)
-        self.content_stack.addWidget(self.screenshots)
-        
-        # Вкладка 3: Пресеты скриншотов
+        # Вкладка 2: Пресеты скриншотов
         self.screenshot_presets = ScreenshotPresetsWidget(
             self.screenshot_preset_storage,
             self.preset_storage,
@@ -2010,8 +1770,7 @@ class MainWindow(QMainWindow):
         
         # Подключаем кнопки навигации
         self.btn_window_selection.clicked.connect(lambda: self._switch_tab(0))
-        self.btn_screenshots.clicked.connect(lambda: self._switch_tab(1))
-        self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(2))
+        self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(1))
     
     def _switch_tab(self, index: int):
         """Переключает вкладку и обновляет состояние кнопок."""

@@ -2,8 +2,8 @@
 Модуль для хранения пресетов скриншотов.
 
 Предоставляет функциональность для:
-- Добавления пресетов скриншотов
-- Удаления пресетов
+- Добавления пресетов скриншотов (с автоматическим созданием скриншота)
+- Удаления пресетов (с автоматическим удалением скриншота)
 - Редактирования пресетов
 - Получения списка пресетов
 - Быстрого создания скриншота по пресету
@@ -24,7 +24,7 @@ class ScreenshotPreset:
     id: str
     name: str
     screenshot_path: str  # Путь к файлу изображения (например: presets/screenshots/my_preset.png)
-    process_preset_id: str  # ID связанного пресета нормализации
+    process_preset_id: str  # ID связанного пресета нормализации (может быть пустым)
     x: int
     y: int
     width: int
@@ -35,7 +35,8 @@ class ScreenshotPreset:
 
     def __repr__(self) -> str:
         coord_type = "relative" if self.use_relative_coords else "global"
-        return f"ScreenshotPreset(id={self.id}, name='{self.name}', process='{self.process_preset_id}', coords={coord_type})"
+        process_info = f", process='{self.process_preset_id}'" if self.process_preset_id else ""
+        return f"ScreenshotPreset(id={self.id}, name='{self.name}'{process_info}, coords={coord_type})"
 
 
 class ScreenshotPresetStorage:
@@ -104,15 +105,17 @@ class ScreenshotPresetStorage:
         description: str = "",
         use_relative_coords: bool = False,
         window_id: Optional[int] = None,
+        screenshot_manager: Optional[ScreenshotManager] = None,
+        window_manager=None,  # WindowManager для захвата по относительным координатам
     ) -> ScreenshotPreset:
         """
-        Добавляет новый пресет скриншота.
+        Добавляет новый пресет скриншота и автоматически делает скриншот.
 
         Args:
             preset_id: Уникальный идентификатор пресета.
             name: Отображаемое имя пресета.
             screenshot_path: Путь для сохранения скриншота.
-            process_preset_id: ID связанного пресета нормализации.
+            process_preset_id: ID связанного пресета нормализации (может быть пустым).
             x: Координата X области скриншота.
             y: Координата Y области скриншота.
             width: Ширина области скриншота.
@@ -120,6 +123,8 @@ class ScreenshotPresetStorage:
             description: Описание пресета.
             use_relative_coords: Если True, координаты относительные для окна процесса.
             window_id: Handle окна для относительных координат (опционально).
+            screenshot_manager: Менеджер скриншотов для автоматического создания скриншота.
+            window_manager: Менеджер окон для захвата по относительным координатам.
 
         Returns:
             Созданный пресет.
@@ -144,12 +149,21 @@ class ScreenshotPresetStorage:
             window_id=window_id,
         )
         self._presets[preset_id] = preset
+        
+        # Автоматически делаем скриншот при создании пресета
+        if screenshot_manager is not None:
+            self.capture_with_preset(
+                preset=preset,
+                screenshot_manager=screenshot_manager,
+                window_manager=window_manager,
+            )
+        
         self.save()
         return preset
 
     def remove_preset(self, preset_id: str) -> bool:
         """
-        Удаляет пресет.
+        Удаляет пресет и соответствующий файл скриншота.
 
         Args:
             preset_id: Идентификатор пресета для удаления.
@@ -159,6 +173,13 @@ class ScreenshotPresetStorage:
         """
         if preset_id not in self._presets:
             return False
+
+        preset = self._presets[preset_id]
+        
+        # Удаляем файл скриншота
+        screenshot_path = Path(preset.screenshot_path)
+        if screenshot_path.exists():
+            screenshot_path.unlink()
 
         del self._presets[preset_id]
         self.save()
