@@ -88,6 +88,7 @@ class ScreenshotManager:
         height: int,
         screenshot_id: Optional[str] = None,
         description: str = "",
+        output_path: Optional[str] = None,
     ) -> ScreenshotInfo:
         """
         Делает скриншот указанной области экрана.
@@ -100,24 +101,30 @@ class ScreenshotManager:
             screenshot_id: Уникальный идентификатор скриншота.
                           Если не указан, генерируется автоматически.
             description: Описание скриншота.
+            output_path: Путь к файлу для сохранения (включая имя файла).
+                        Если не указан, используется путь по умолчанию в хранилище.
+                        Если файл существует, он будет перезаписан.
 
         Returns:
             Информация о созданном скриншоте.
-
-        Raises:
-            ValueError: Если скриншот с таким ID уже существует.
         """
         if screenshot_id is None:
             screenshot_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
-        if screenshot_id in self._screenshots:
-            raise ValueError(f"Скриншот с ID '{screenshot_id}' уже существует")
-
         # Создаем директорию если не существует
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
+        # Определяем путь сохранения
+        if output_path:
+            # Если указан полный путь, используем его
+            file_path = Path(output_path)
+            # Убедимся, что директория существует
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            # Используем путь по умолчанию в хранилище
+            file_path = self.storage_path / f"{screenshot_id}.png"
+
         # Делаем скриншот
-        file_path = self.storage_path / f"{screenshot_id}.png"
         self._capture_area(x, y, width, height, file_path)
 
         screenshot_info = ScreenshotInfo(

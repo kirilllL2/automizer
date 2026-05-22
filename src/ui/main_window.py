@@ -1453,14 +1453,12 @@ class ScreenshotPresetsWidget(QWidget):
         if not preset:
             return
         
-        self.screenshot_manager.capture(
-            x=preset.x,
-            y=preset.y,
-            width=preset.width,
-            height=preset.height,
-            description=f"Скриншот по пресету '{preset.name}'",
+        # Используем capture_with_preset для сохранения по пути из пресета
+        self.preset_storage.capture_with_preset(
+            preset=preset,
+            screenshot_manager=self.screenshot_manager,
         )
-        QMessageBox.information(self, "Успех", "Скриншот создан!")
+        QMessageBox.information(self, "Успех", f"Скриншот сохранен в: {preset.screenshot_path}")
     
     def _full_capture(self):
         """Выполняет полный захват: нормализация + скриншот."""
@@ -1486,21 +1484,18 @@ class ScreenshotPresetsWidget(QWidget):
             QMessageBox.critical(self, "Ошибка", "Не удалось применить пресет процесса!")
             return
         
-        # Создаем скриншот
+        # Создаем скриншот с использованием пресета (сохранение по пути из пресета)
         screenshot_preset = self.preset_storage.get_preset(screenshot_preset_id)
         if not screenshot_preset:
             QMessageBox.critical(self, "Ошибка", "Пресет скриншота не найден!")
             return
         
-        self.screenshot_manager.capture(
-            x=screenshot_preset.x,
-            y=screenshot_preset.y,
-            width=screenshot_preset.width,
-            height=screenshot_preset.height,
-            description=f"Быстрый захват: {process_preset.name} + {screenshot_preset.name}",
+        self.preset_storage.capture_with_preset(
+            preset=screenshot_preset,
+            screenshot_manager=self.screenshot_manager,
         )
         
-        QMessageBox.information(self, "Успех", "Полный захват выполнен!")
+        QMessageBox.information(self, "Успех", f"Полный захват выполнен! Скриншот сохранен в: {screenshot_preset.screenshot_path}")
 
 
 class ScreenshotPresetDialog(QDialog):
@@ -1585,14 +1580,26 @@ class ScreenshotPresetDialog(QDialog):
     
     def get_data(self) -> dict:
         """Возвращает данные из формы."""
+        name = self.name_input.text().strip()
+        if not name:
+            raise ValueError("Имя пресета не может быть пустым")
+        
+        screenshot_path = self.path_input.text().strip()
+        # Если путь не указан, генерируем его на основе имени пресета
+        if not screenshot_path:
+            screenshot_path = f"presets/screenshots/{name}.png"
+        # Убедимся, что путь имеет расширение .png
+        elif not screenshot_path.endswith('.png'):
+            screenshot_path = f"{screenshot_path}.png"
+        
         return {
-            "name": self.name_input.text(),
+            "name": name,
             "process_preset_id": self.process_combo.currentData() or "default",
             "x": self.x_input.value(),
             "y": self.y_input.value(),
             "width": self.width_input.value(),
             "height": self.height_input.value(),
-            "screenshot_path": self.path_input.text() or "presets/screenshots",
+            "screenshot_path": screenshot_path,
             "description": self.desc_input.text(),
         }
 
