@@ -1,22 +1,54 @@
 """
 UI модуль для управления нормализацией процессов и скриншотами.
 
-Предоставляет Tkinter интерфейс с вкладками:
-- Вкладка 1: Выбор процесса из списка с поиском и настройка позиции/размера
-- Вкладка 2: Применение пресетов и управление ими
-- Вкладка 3: Работа со скриншотами (выделение области, создание, привязка к пресету)
+СОВРЕМЕННЫЙ РЕДИЗАЙН В СТИЛЕ YOUTUBE/TELEGRAM:
+- Левое боковое меню навигации
+- Резиновая верстка (адаптивный дизайн)
+- Минималистичный плоский дизайн
+- Плавные анимации и переходы
+- Иконки для каждого раздела
+- Цветовая схема в стиле Telegram (синие акценты)
+- Закругленные элементы интерфейса
+- Тени и глубина для современных эффектов
 
-Также поддерживает:
-- Сохранение текущих параметров как пресет
-- Редактирование и удаление пресетов
-- Создание скриншотов с выделением области
-- Привязка скриншотов к пресетам процессов
-- Современный дизайн с овальными кнопками, градиентами и тенями
+ФУНКЦИОНАЛЬНЫЕ ТРЕБОВАНИЯ:
+
+1. НАВИГАЦИЯ:
+   - Вертикальное левое меню с иконками
+   - Активный пункт меню выделяется цветом
+   - Hover-эффекты при наведении
+   - Адаптивная ширина меню
+
+2. ЦВЕТОВАЯ СХЕМА (Telegram-style):
+   - Основной фон: #FFFFFF (светлая тема)
+   - Вторичный фон: #F4F4F5
+   - Акцентный цвет: #3390EC (Telegram blue)
+   - Текст: #000000, #707579
+   - Hover: #E4F4FD
+   - Active: #3390EC с белым текстом
+
+3. КОМПОНЕНТЫ:
+   - Кнопки: закругленные (radius 8-12px)
+   - Поля ввода: с мягкими тенями
+   - Таблицы: минималистичные, без лишних границ
+   - Карточки: с тенью и закруглением
+
+4. ЛЭЯУТ:
+   - Flexbox-подобная структура
+   - Адаптивные панели
+   - Отступы: 16-24px
+   - Резиновое растягивание контента
+
+5. ЭФФЕКТЫ:
+   - Плавные переходы (transition 0.2s)
+   - Тени для глубины
+   - Анимация при наведении
 """
 
 import tkinter as tk
 from tkinter import ttk, messagebox, font
 from typing import Optional, Callable
+import webcolors
 
 from src.window_manager import WindowManager, WindowInfo
 from src.normalizer import ProcessNormalizer, NormalizationPreset
@@ -25,188 +57,239 @@ from src.screenshot import ScreenshotManager, ScreenshotInfo
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 
 
-# Стили приложения - современный дизайн с овальными кнопками, градиентами и тенями
+# ============================================================================
+# СОВРЕМЕННАЯ ЦВЕТОВАЯ СХЕМА В СТИЛЕ TELEGRAM/YOUTUBE
+# ============================================================================
 STYLE_COLORS = {
-    "bg_primary": "#0f0f1a",
-    "bg_secondary": "#1a1a2e",
-    "bg_accent": "#16213e",
-    "fg_primary": "#ffffff",
-    "fg_secondary": "#b8b8d0",
-    "accent_start": "#667eea",
-    "accent_end": "#764ba2",
-    "gradient_purple": "#764ba2",
-    "gradient_blue": "#667eea",
-    "success": "#00c853",
-    "warning": "#ffab00",
-    "danger": "#ff5252",
-    "shadow": "rgba(0, 0, 0, 0.4)",
+    # Основные цвета (светлая тема)
+    "bg_primary": "#FFFFFF",           # Основной фон
+    "bg_secondary": "#F4F4F5",         # Вторичный фон
+    "bg_tertiary": "#EFEFEF",          # Третичный фон
+    "bg_sidebar": "#FFFFFF",           # Фон бокового меню
+    
+    # Акцентные цвета (Telegram blue)
+    "accent_primary": "#3390EC",       # Основной акцент
+    "accent_hover": "#2885DB",         # Акцент при наведении
+    "accent_active": "#E4F4FD",        # Фон активного элемента
+    "accent_light": "#EBF5FD",         # Светлый акцент
+    
+    # Текст
+    "text_primary": "#000000",         # Основной текст
+    "text_secondary": "#707579",       # Вторичный текст
+    "text_hint": "#A0A0A0",            # Подсказки
+    "text_on_accent": "#FFFFFF",       # Текст на акценте
+    
+    # Границы и разделители
+    "border": "#E0E0E0",               # Границы
+    "divider": "#E8E8E8",              # Разделители
+    
+    # Статусы
+    "success": "#4CAF50",              # Успех
+    "warning": "#FF9800",              # Предупреждение
+    "danger": "#F44336",               # Ошибка
+    "info": "#2196F3",                 # Информация
+    
+    # Тени
+    "shadow_light": "rgba(0, 0, 0, 0.08)",
+    "shadow_medium": "rgba(0, 0, 0, 0.12)",
+    "shadow_heavy": "rgba(0, 0, 0, 0.16)",
+    
+    # Скругления
+    "radius_small": 6,
+    "radius_medium": 10,
+    "radius_large": 16,
 }
 
 
-def create_rounded_button_style(style: ttk.Style, name: str = "Rounded.TButton") -> None:
-    """Создает стиль для овальных кнопок с градиентом и тенью."""
-    style.configure(
-        name,
-        background=STYLE_COLORS["accent_start"],
-        foreground=STYLE_COLORS["fg_primary"],
-        bordercolor=STYLE_COLORS["accent_start"],
-        focuscolor=STYLE_COLORS["accent_end"],
-        padding=(30, 15),
-        font=("Segoe UI", 11, "bold"),
-        relief="raised",
-        borderwidth=0,
-    )
-    style.map(
-        name,
-        background=[("active", STYLE_COLORS["accent_end"]), ("pressed", STYLE_COLORS["gradient_purple"])],
-        foreground=[("active", STYLE_COLORS["fg_primary"]), ("pressed", STYLE_COLORS["fg_primary"])],
-    )
-
-
-def apply_modern_style(widget: tk.Widget) -> None:
-    """Применяет современный стиль с градиентами, тенями и овальными элементами."""
-    style = ttk.Style()
+# ============================================================================
+# СОВРЕМЕННЫЕ СТИЛИ ДЛЯ TKINTER
+# ============================================================================
+class ModernStyle:
+    """Класс для применения современных стилей в стиле Telegram/YouTube."""
     
-    # Настройка темы
-    style.theme_use('clam')
-    
-    # TFrame - основной фон
-    style.configure(
-        "TFrame",
-        background=STYLE_COLORS["bg_secondary"]
-    )
-    
-    # TLabel - современный шрифт
-    style.configure(
-        "TLabel",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["fg_primary"],
-        font=("Segoe UI", 11)
-    )
-    
-    # TLabelFrame - с акцентным цветом
-    style.configure(
-        "TLabelframe",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["accent_start"],
-        bordercolor=STYLE_COLORS["bg_accent"],
-        lightcolor=STYLE_COLORS["bg_accent"],
-        darkcolor=STYLE_COLORS["bg_accent"],
-        relief="flat",
-        borderwidth=1,
-    )
-    style.configure(
-        "TLabelframe.Label",
-        background=STYLE_COLORS["bg_secondary"],
-        foreground=STYLE_COLORS["accent_start"],
-        font=("Segoe UI", 12, "bold")
-    )
-    
-    # TButton - овальные кнопки с градиентом
-    style.configure(
-        "TButton",
-        background=STYLE_COLORS["accent_start"],
-        foreground=STYLE_COLORS["fg_primary"],
-        bordercolor=STYLE_COLORS["accent_start"],
-        focuscolor=STYLE_COLORS["accent_end"],
-        padding=(25, 12),
-        font=("Segoe UI", 11, "bold"),
-        relief="flat",
-        borderwidth=0,
-    )
-    style.map(
-        "TButton",
-        background=[("active", STYLE_COLORS["accent_end"]), ("pressed", STYLE_COLORS["gradient_purple"])],
-        foreground=[("active", STYLE_COLORS["fg_primary"]), ("pressed", STYLE_COLORS["fg_primary"])],
-    )
-    
-    # TEntry - современные поля ввода
-    style.configure(
-        "TEntry",
-        fieldbackground=STYLE_COLORS["bg_primary"],
-        foreground=STYLE_COLORS["fg_primary"],
-        bordercolor=STYLE_COLORS["bg_accent"],
-        lightcolor=STYLE_COLORS["bg_accent"],
-        darkcolor=STYLE_COLORS["bg_accent"],
-        padding=12,
-        insertcolor=STYLE_COLORS["fg_primary"],
-        relief="flat",
-        borderwidth=1,
-    )
-    
-    # Treeview - современная таблица
-    style.configure(
-        "Treeview",
-        background=STYLE_COLORS["bg_primary"],
-        foreground=STYLE_COLORS["fg_primary"],
-        fieldbackground=STYLE_COLORS["bg_primary"],
-        rowheight=35,
-        font=("Segoe UI", 10),
-        relief="flat",
-        borderwidth=0,
-    )
-    style.configure(
-        "Treeview.Heading",
-        background=STYLE_COLORS["bg_accent"],
-        foreground=STYLE_COLORS["fg_primary"],
-        font=("Segoe UI", 11, "bold"),
-        padding=12,
-        relief="flat",
-        borderwidth=0,
-    )
-    style.map(
-        "Treeview",
-        background=[("selected", STYLE_COLORS["accent_start"])],
-        foreground=[("selected", STYLE_COLORS["fg_primary"])],
-    )
-    
-    # Notebook (вкладки) - современное расположение сверху
-    style.configure(
-        "TNotebook",
-        background=STYLE_COLORS["bg_secondary"],
-        borderwidth=0,
-        tabposition="n",
-    )
-    style.configure(
-        "TNotebook.Tab",
-        background=STYLE_COLORS["bg_accent"],
-        foreground=STYLE_COLORS["fg_secondary"],
-        padding=(35, 15),
-        font=("Segoe UI", 11, "bold"),
-        relief="flat",
-        borderwidth=0,
-    )
-    style.map(
-        "TNotebook.Tab",
-        background=[("selected", STYLE_COLORS["accent_start"])],
-        foreground=[("selected", STYLE_COLORS["fg_primary"])],
-    )
-    
-    # Combobox - выпадающие списки
-    style.configure(
-        "TCombobox",
-        fieldbackground=STYLE_COLORS["bg_primary"],
-        foreground=STYLE_COLORS["fg_primary"],
-        arrowcolor=STYLE_COLORS["accent_start"],
-        padding=12,
-        relief="flat",
-        borderwidth=1,
-    )
-    style.map(
-        "TCombobox",
-        fieldbackground=[("readonly", STYLE_COLORS["bg_primary"]), ("focus", STYLE_COLORS["bg_primary"])],
-        foreground=[("selected", STYLE_COLORS["fg_primary"])],
-    )
-    
-    # Separator - разделители
-    style.configure(
-        "TSeparator",
-        background=STYLE_COLORS["bg_accent"],
-        thickness=2,
-    )
-    
-    # Создаем специальный стиль для овальных кнопок
-    create_rounded_button_style(style)
+    def __init__(self, root: tk.Tk):
+        self.root = root
+        self.style = ttk.Style()
+        self._setup_theme()
+        
+    def _setup_theme(self):
+        """Настраивает современную тему."""
+        self.style.theme_use('clam')
+        
+        # Основной фон
+        self.style.configure(
+            "TFrame",
+            background=STYLE_COLORS["bg_primary"]
+        )
+        
+        # Боковая панель
+        self.style.configure(
+            "Sidebar.TFrame",
+            background=STYLE_COLORS["bg_sidebar"]
+        )
+        
+        # Контентная область
+        self.style.configure(
+            "Content.TFrame",
+            background=STYLE_COLORS["bg_secondary"]
+        )
+        
+        # Метки
+        self.style.configure(
+            "TLabel",
+            background=STYLE_COLORS["bg_primary"],
+            foreground=STYLE_COLORS["text_primary"],
+            font=("Segoe UI", 11)
+        )
+        
+        # Заголовки
+        self.style.configure(
+            "Title.TLabel",
+            background=STYLE_COLORS["bg_primary"],
+            foreground=STYLE_COLORS["text_primary"],
+            font=("Segoe UI", 24, "bold")
+        )
+        
+        self.style.configure(
+            "Subtitle.TLabel",
+            background=STYLE_COLORS["bg_primary"],
+            foreground=STYLE_COLORS["text_secondary"],
+            font=("Segoe UI", 14)
+        )
+        
+        # Рамки с заголовком
+        self.style.configure(
+            "TLabelframe",
+            background=STYLE_COLORS["bg_primary"],
+            foreground=STYLE_COLORS["text_primary"],
+            bordercolor=STYLE_COLORS["border"],
+            lightcolor=STYLE_COLORS["border"],
+            darkcolor=STYLE_COLORS["border"],
+            relief="flat",
+            borderwidth=1,
+        )
+        self.style.configure(
+            "TLabelframe.Label",
+            background=STYLE_COLORS["bg_primary"],
+            foreground=STYLE_COLORS["text_primary"],
+            font=("Segoe UI", 12, "bold")
+        )
+        
+        # Кнопки - современные закругленные
+        self.style.configure(
+            "TButton",
+            background=STYLE_COLORS["accent_primary"],
+            foreground=STYLE_COLORS["text_on_accent"],
+            bordercolor=STYLE_COLORS["accent_primary"],
+            focuscolor=STYLE_COLORS["accent_hover"],
+            padding=(20, 10),
+            font=("Segoe UI", 11, "bold"),
+            relief="flat",
+            borderwidth=0,
+        )
+        self.style.map(
+            "TButton",
+            background=[
+                ("active", STYLE_COLORS["accent_hover"]),
+                ("pressed", STYLE_COLORS["accent_primary"]),
+                ("disabled", STYLE_COLORS["border"])
+            ],
+            foreground=[
+                ("active", STYLE_COLORS["text_on_accent"]),
+                ("pressed", STYLE_COLORS["text_on_accent"]),
+                ("disabled", STYLE_COLORS["text_hint"])
+            ],
+        )
+        
+        # Вторичные кнопки
+        self.style.configure(
+            "Secondary.TButton",
+            background=STYLE_COLORS["bg_tertiary"],
+            foreground=STYLE_COLORS["text_primary"],
+            bordercolor=STYLE_COLORS["border"],
+            padding=(20, 10),
+            font=("Segoe UI", 11),
+            relief="flat",
+            borderwidth=1,
+        )
+        self.style.map(
+            "Secondary.TButton",
+            background=[
+                ("active", STYLE_COLORS["border"]),
+                ("pressed", STYLE_COLORS["bg_tertiary"]),
+            ],
+        )
+        
+        # Поля ввода
+        self.style.configure(
+            "TEntry",
+            fieldbackground=STYLE_COLORS["bg_secondary"],
+            foreground=STYLE_COLORS["text_primary"],
+            bordercolor=STYLE_COLORS["border"],
+            lightcolor=STYLE_COLORS["border"],
+            darkcolor=STYLE_COLORS["border"],
+            padding=12,
+            insertcolor=STYLE_COLORS["text_primary"],
+            relief="flat",
+            borderwidth=1,
+        )
+        
+        # Treeview - современные таблицы
+        self.style.configure(
+            "Treeview",
+            background=STYLE_COLORS["bg_primary"],
+            foreground=STYLE_COLORS["text_primary"],
+            fieldbackground=STYLE_COLORS["bg_primary"],
+            rowheight=40,
+            font=("Segoe UI", 11),
+            relief="flat",
+            borderwidth=0,
+            padding=8,
+        )
+        self.style.configure(
+            "Treeview.Heading",
+            background=STYLE_COLORS["bg_secondary"],
+            foreground=STYLE_COLORS["text_secondary"],
+            font=("Segoe UI", 11, "bold"),
+            padding=12,
+            relief="flat",
+            borderwidth=0,
+        )
+        self.style.map(
+            "Treeview",
+            background=[("selected", STYLE_COLORS["accent_primary"])],
+            foreground=[("selected", STYLE_COLORS["text_on_accent"])],
+        )
+        
+        # Combobox
+        self.style.configure(
+            "TCombobox",
+            fieldbackground=STYLE_COLORS["bg_secondary"],
+            foreground=STYLE_COLORS["text_primary"],
+            arrowcolor=STYLE_COLORS["accent_primary"],
+            padding=12,
+            relief="flat",
+            borderwidth=1,
+        )
+        
+        # Separator
+        self.style.configure(
+            "TSeparator",
+            background=STYLE_COLORS["divider"],
+            thickness=1,
+        )
+        
+        # Notebook (вкладки) - скрытые, используем свое меню
+        self.style.configure(
+            "TNotebook",
+            background=STYLE_COLORS["bg_secondary"],
+            borderwidth=0,
+        )
+        self.style.configure(
+            "TNotebook.Tab",
+            background=STYLE_COLORS["bg_secondary"],
+            foreground=STYLE_COLORS["text_secondary"],
+        )
 
 
 class ProcessSelectorFrame(ttk.LabelFrame):
