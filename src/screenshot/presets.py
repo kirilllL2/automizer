@@ -23,7 +23,7 @@ class ScreenshotPreset:
 
     id: str
     name: str
-    screenshot_path: str  # Путь для сохранения скриншота
+    screenshot_path: str  # Путь к файлу изображения (например: presets/screenshots/my_preset.png)
     process_preset_id: str  # ID связанного пресета нормализации
     x: int
     y: int
@@ -244,19 +244,23 @@ class ScreenshotPresetStorage:
         self,
         preset: ScreenshotPreset,
         screenshot_manager: ScreenshotManager,
-        screenshot_id: Optional[str] = None,
     ) -> ScreenshotInfo:
         """
         Делает скриншот используя пресет.
 
+        Скриншот сохраняется по пути, указанному в пресете (screenshot_path).
+        Если файл уже существует, он будет перезаписан.
+
         Args:
             preset: Пресет для использования.
             screenshot_manager: Менеджер скриншотов.
-            screenshot_id: Уникальный ID скриншота (генерируется автоматически если не указан).
 
         Returns:
-            Информация о созданном скриншоте.
+            Информация о созданном/обновленном скриншоте.
         """
+        # Используем ID пресета как ID скриншота для обеспечения соответствия 1:1
+        screenshot_id = preset.id
+        
         return screenshot_manager.capture(
             x=preset.x,
             y=preset.y,
@@ -264,4 +268,5 @@ class ScreenshotPresetStorage:
             height=preset.height,
             screenshot_id=screenshot_id,
             description=f"Скриншот по пресету '{preset.name}'",
+            output_path=preset.screenshot_path,
         )
