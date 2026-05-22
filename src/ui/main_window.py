@@ -1397,6 +1397,8 @@ class ScreenshotPresetsWidget(QWidget):
             return
         
         path = os.path.dirname(screenshot_path)
+        # Преобразуем в абсолютный путь
+        path = os.path.abspath(path)
         if not os.path.exists(path):
             QMessageBox.warning(self, "Предупреждение", f"Папка не найдена: {path}")
             return
