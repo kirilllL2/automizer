@@ -1320,7 +1320,7 @@ class ScreenshotsWidget(QWidget):
 
 
 class ScreenshotPresetsWidget(QWidget):
-    """Виджет управления пресетами скриншотов (вкладка 4)."""
+    """Виджет управления пресетами скриншотов и самими скриншотами (объединенная вкладка)."""
     
     def __init__(self, 
                  preset_storage: ScreenshotPresetStorage,
@@ -1341,7 +1341,7 @@ class ScreenshotPresetsWidget(QWidget):
                                    ModernStyle.PADDING, ModernStyle.PADDING)
         
         # Заголовок
-        title = QLabel("🎬 Пресеты скриншотов и быстрый захват")
+        title = QLabel("🎬 Пресеты скриншотов")
         title.setObjectName("titleLabel")
         layout.addWidget(title)
         
@@ -1400,15 +1400,9 @@ class ScreenshotPresetsWidget(QWidget):
         capture_title.setObjectName("sectionTitle")
         capture_layout.addWidget(capture_title)
         
-        # Выбор пресетов
+        # Выбор пресета скриншота (теперь пресет содержит всю необходимую информацию)
         select_layout = QHBoxLayout()
         select_layout.setSpacing(16)
-        
-        self.process_preset_combo = QComboBox()
-        self.process_preset_combo.addItem("Выберите пресет процесса...", "")
-        self._update_process_presets()
-        select_layout.addWidget(QLabel("Пресет процесса:"))
-        select_layout.addWidget(self.process_preset_combo)
         
         self.screenshot_preset_combo = QComboBox()
         self.screenshot_preset_combo.addItem("Выберите пресет скриншота...", "")
@@ -1439,14 +1433,6 @@ class ScreenshotPresetsWidget(QWidget):
         
         # Загружаем пресеты
         self._load_presets()
-    
-    def _update_process_presets(self):
-        """Обновляет список пресетов процессов."""
-        self.process_preset_combo.clear()
-        self.process_preset_combo.addItem("Выберите пресет процесса...", "")
-        
-        for preset in self.process_storage.get_all_presets():
-            self.process_preset_combo.addItem(preset.name, preset.id)
     
     def _update_screenshot_presets(self):
         """Обновляет список пресетов скриншотов."""
@@ -1513,10 +1499,21 @@ class ScreenshotPresetsWidget(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             data = dialog.get_data()
             try:
-                self.preset_storage.add_preset(**data)
+                # Проверяем: если пресет привязан к процессу, нормализуем его сначала
+                if data["process_preset_id"]:
+                    process_preset = self.process_storage.get_preset(data["process_preset_id"])
+                    if process_preset:
+                        # Нормализуем окно процесса перед созданием скриншота
+                        self.normalizer.apply_preset(process_preset)
+                
+                self.preset_storage.add_preset(
+                    **data,
+                    screenshot_manager=self.screenshot_manager,
+                    window_manager=self.normalizer.window_manager,
+                )
                 self._load_presets()
                 self._update_screenshot_presets()
-                QMessageBox.information(self, "Успех", "Пресет добавлен!")
+                QMessageBox.information(self, "Успех", "Пресет добавлен и скриншот создан!")
             except ValueError as e:
                 QMessageBox.critical(self, "Ошибка", str(e))
     
@@ -1595,40 +1592,43 @@ class ScreenshotPresetsWidget(QWidget):
     
     def _full_capture(self):
         """Выполняет полный захват: нормализация + скриншот."""
-        process_preset_id = self.process_preset_combo.currentData()
         screenshot_preset_id = self.screenshot_preset_combo.currentData()
-        
-        if not process_preset_id:
-            QMessageBox.warning(self, "Предупреждение", "Выберите пресет процесса!")
-            return
         
         if not screenshot_preset_id:
             QMessageBox.warning(self, "Предупреждение", "Выберите пресет скриншота!")
             return
         
-        # Применяем пресет процесса
-        process_preset = self.process_storage.get_preset(process_preset_id)
-        if not process_preset:
-            QMessageBox.critical(self, "Ошибка", "Пресет процесса не найден!")
-            return
-        
-        success = self.normalizer.apply_preset(process_preset)
-        if not success:
-            QMessageBox.critical(self, "Ошибка", "Не удалось применить пресет процесса!")
-            return
-        
-        # Создаем скриншот с использованием пресета (сохранение по пути из пресета)
+        # Получаем пресет скриншота - он содержит process_preset_id внутри
         screenshot_preset = self.preset_storage.get_preset(screenshot_preset_id)
         if not screenshot_preset:
             QMessageBox.critical(self, "Ошибка", "Пресет скриншота не найден!")
             return
         
+        # Если пресет привязан к процессу, сначала нормализуем его
+        if screenshot_preset.process_preset_id:
+            process_preset = self.process_storage.get_preset(screenshot_preset.process_preset_id)
+            if process_preset:
+                success = self.normalizer.apply_preset(process_preset)
+                if not success:
+                    QMessageBox.critical(self, "Ошибка", "Не удалось применить пресет процесса!")
+                    return
+            else:
+                QMessageBox.critical(self, "Ошибка", "Пресет процесса не найден!")
+                return
+        
+        # Создаем скриншот с использованием пресета (сохранение по пути из пресета)
         # Для относительных координат обновляем window_id из текущего окна
         if screenshot_preset.use_relative_coords:
             # Ищем окно после применения пресета
             windows = self.normalizer.window_manager.get_windows()
+            process_name = ""
+            if screenshot_preset.process_preset_id:
+                process_preset = self.process_storage.get_preset(screenshot_preset.process_preset_id)
+                if process_preset:
+                    process_name = process_preset.process_name
+            
             for win in windows:
-                if process_preset.process_name.lower() in win.title.lower():
+                if not process_name or process_name.lower() in win.title.lower():
                     screenshot_preset.window_id = win.window_id
                     break
         
