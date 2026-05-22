@@ -12,10 +12,9 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QLineEdit, QTableWidget, QTableWidgetItem,
     QHeaderView, QFrame, QScrollArea, QGridLayout, QSpacerItem,
     QSizePolicy, QMessageBox, QFileDialog, QDialog, QDialogButtonBox,
-    QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect,
-    QEasingCurve
+    QFormLayout, QSpinBox, QComboBox, QGraphicsDropShadowEffect
 )
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation, QPropertyAnimation
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QSize, pyqtProperty, QVariantAnimation, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QFont, QIcon, QColor, QPalette, QAction, QCursor
 
 from src.normalizer import ProcessNormalizer, NormalizationPreset
