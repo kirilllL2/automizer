@@ -282,3 +282,58 @@ class WindowManager:
         except Exception as e:
             print(f"Ошибка при захвате области окна: {e}")
             return False
+
+    def click_in_window(
+        self,
+        window_id: int,
+        x: int,
+        y: int,
+        percent: float = 0.5,
+    ) -> bool:
+        """
+        Выполняет клик в указанной области окна используя низкоуровневое взаимодействие.
+        
+        Этот метод использует Windows API для эмуляции клика мыши, что позволяет
+        работать с оконными приложениями (включая Unity игры), которые могут не
+        реагировать на стандартные методы симуляции кликов.
+        
+        Args:
+            window_id: Handle окна.
+            x: Относительная координата X внутри области (0-1).
+            y: Относительная координата Y внутри области (0-1).
+            percent: Процент от размера области для клика (0.0-1.0). По умолчанию 0.5 (центр).
+            
+        Returns:
+            True, если операция успешна.
+        """
+        try:
+            import ctypes
+            from ctypes import wintypes
+            
+            # Получаем координаты окна
+            left, top, right, bottom = win32gui.GetWindowRect(window_id)
+            window_width = right - left
+            window_height = bottom - top
+            
+            # Вычисляем абсолютные координаты клика
+            abs_x = left + int(window_width * x)
+            abs_y = top + int(window_height * y)
+            
+            # Перемещаем курсор
+            ctypes.windll.user32.SetCursorPos(abs_x, abs_y)
+            
+            # Небольшая задержка для стабильности
+            import time
+            time.sleep(0.05)
+            
+            # Эмулируем нажатие и отпускание левой кнопки мыши
+            # MOUSEEVENTF_LEFTDOWN = 0x0002
+            # MOUSEEVENTF_LEFTUP = 0x0004
+            ctypes.windll.user32.mouse_event(0x0002, 0, 0, 0, 0)
+            time.sleep(0.05)
+            ctypes.windll.user32.mouse_event(0x0004, 0, 0, 0, 0)
+            
+            return True
+        except Exception as e:
+            print(f"Ошибка при клике в окно: {e}")
+            return False

@@ -12,9 +12,10 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional, Any
 
-from src.screenshot import ScreenshotManager, ScreenshotInfo
+if TYPE_CHECKING:
+    from . import ScreenshotManager, ScreenshotInfo
 
 
 @dataclass
@@ -105,7 +106,7 @@ class ScreenshotPresetStorage:
         description: str = "",
         use_relative_coords: bool = False,
         window_id: Optional[int] = None,
-        screenshot_manager: Optional[ScreenshotManager] = None,
+        screenshot_manager: Optional["ScreenshotManager"] = None,
         window_manager=None,  # WindowManager для захвата по относительным координатам
     ) -> ScreenshotPreset:
         """
@@ -281,9 +282,9 @@ class ScreenshotPresetStorage:
     def capture_with_preset(
         self,
         preset: ScreenshotPreset,
-        screenshot_manager: ScreenshotManager,
+        screenshot_manager: "ScreenshotManager",
         window_manager=None,  # WindowManager для захвата по относительным координатам
-    ) -> Optional[ScreenshotInfo]:
+    ) -> Optional[Any]:
         """
         Делает скриншот используя пресет.
 
@@ -301,6 +302,9 @@ class ScreenshotPresetStorage:
         Returns:
             Информация о созданном/обновленном скриншоте или None при ошибке.
         """
+        # Импортируем внутри функции чтобы избежать циклического импорта
+        from . import ScreenshotInfo
+        
         # Используем ID пресета как ID скриншота для обеспечения соответствия 1:1
         screenshot_id = preset.id
         

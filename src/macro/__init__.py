@@ -22,6 +22,9 @@ from src.macro.actions import (
     wait_for_region,
     get_screen_size,
     create_region_from_center,
+    focus_window,
+    click_in_window_region,
+    find_window_by_process,
 )
 
 
@@ -49,7 +52,7 @@ class MacroStorage:
     
     def __init__(self, macros_dir: Optional[Path] = None):
         if macros_dir is None:
-            macros_dir = Path(__file__).parent.parent.parent / "macros"
+            macros_dir = Path(__file__).parent / "macros"
         self.macros_dir = macros_dir
         self.macros_dir.mkdir(parents=True, exist_ok=True)
         self.macros: Dict[str, MacroInfo] = {}
