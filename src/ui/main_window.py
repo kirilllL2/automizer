@@ -47,6 +47,9 @@ class ModernStyle:
     BORDER_RADIUS = 12
     PADDING = 16
     SPACING = 12
+    PADDING_SMALL = 8
+    SPACING_SMALL = 6
+    SPACING_TINY = 4
 
 
 def apply_modern_style(widget):
