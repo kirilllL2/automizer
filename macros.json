@@ -1,0 +1,42 @@
+{
+  "macros": [
+    {
+      "id": "cb11175f-4610-424c-af3d-e2bffea50b18",
+      "name": "Тестовый макрос",
+      "description": "Описание теста",
+      "actions": [
+        {
+          "id": "73578117-b080-43a9-931b-db65f86adbd4",
+          "action_type": "click",
+          "name": "Клик 1",
+          "enabled": true,
+          "parameters": {
+            "x": 500,
+            "y": 300
+          }
+        },
+        {
+          "id": "3247a138-19fc-4451-9c66-e220ed8e7c1e",
+          "action_type": "delay",
+          "name": "Задержка 1",
+          "enabled": true,
+          "parameters": {
+            "duration": 0.5
+          }
+        },
+        {
+          "id": "8e6d1cd0-6a0a-4620-9708-4376071cd35f",
+          "action_type": "click",
+          "name": "Клик 2",
+          "enabled": true,
+          "parameters": {
+            "x": 600,
+            "y": 400
+          }
+        }
+      ],
+      "created_at": 1779598046.5905313,
+      "updated_at": 1779598046.5908463
+    }
+  ]
+}

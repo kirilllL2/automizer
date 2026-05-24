@@ -1,15 +1,13 @@
-# Dependencies
-.venv/
-venv/
+```
+# Python
 __pycache__/
 *.pyc
-.mypy_cache/
-.pytest_cache/
+*.pyo
+*.pyd
 
-# Build artifacts
-dist/
-build/
-target/
+# Logs and temp files
+*.log
+*.tmp
 
 # Environment
 .env
@@ -21,40 +19,4 @@ target/
 .idea/
 *.swp
 *.swo
-*.tmp
-
-# Logs
-*.log
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Archives
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+```

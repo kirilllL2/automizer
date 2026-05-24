@@ -3,6 +3,7 @@
 Современный красивый резиновый интерфейс на PyQt6.
 """
 
-from src.ui.main_window import MainWindow
+# Избегаем импорта через __init__.py чтобы не загружать window_manager
+from ui.main_window import MainWindow
 
-__all__ = ["MainWindow"]
+__all__ = ["MainWindow", "MacrosWidget"]
