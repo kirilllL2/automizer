@@ -22,6 +22,7 @@ from src.macro.actions import (
     wait_for_region,
     get_screen_size,
     create_region_from_center,
+    focus_window,
 )
 
 

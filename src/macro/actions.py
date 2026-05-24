@@ -126,7 +126,7 @@ def click(x: int, y: int):
 
 def click_in_region(
     region: Region,
-    percent: float = 0.0,
+    percent: Optional[float] = None,
     distribution: str = "uniform"
 ):
     """
@@ -135,12 +135,17 @@ def click_in_region(
     Args:
         region: Область для клика.
         percent: Процент от центра области (0.0 - 1.0). 
+                 Если None, берется из конфигурации (macros.default_click_percent).
                  0.0 = вся область, 1.0 = только центр.
         distribution: Тип распределения ("uniform" или "gaussian").
     
     Raises:
         ValueError: Если percent вне диапазона [0.0, 1.0].
     """
+    # Получаем процент из конфига если не указан
+    if percent is None:
+        percent = get_config().get("macros", "default_click_percent", default=0.3)
+    
     if not 0.0 <= percent <= 1.0:
         raise ValueError(f"percent должен быть в диапазоне [0.0, 1.0], получено {percent}")
     
@@ -473,4 +478,52 @@ __all__ = [
     'wait_for_region',
     'get_screen_size',
     'create_region_from_center',
+    'focus_window',
 ]
+
+
+# ============================================================================
+# Функции управления окнами
+# ============================================================================
+
+def focus_window(process_preset_id: str) -> bool:
+    """
+    Фокусируется на окне, связанном с пресетом процесса.
+    
+    Args:
+        process_preset_id: ID пресета процесса (из presets.json).
+    
+    Returns:
+        True, если фокус установлен успешно, False в противном случае.
+    """
+    from src.storage import PresetStorage
+    from src.window_manager import WindowManager
+    
+    # Получаем хранилище пресетов нормализации
+    preset_storage = PresetStorage()
+    preset_info = preset_storage.get_preset(process_preset_id)
+    
+    if not preset_info:
+        print(f"[Window] Пресет процесса '{process_preset_id}' не найден")
+        return False
+    
+    # Ищем окно по имени процесса из пресета
+    from src.normalizer import ProcessNormalizer
+    normalizer = ProcessNormalizer()
+    window = normalizer.find_window_by_process(preset_info.process_name)
+    
+    if not window:
+        print(f"[Window] Окно для процесса '{preset_info.process_name}' не найдено")
+        return False
+    
+    try:
+        wm = WindowManager()
+        success = wm.focus_window(window.window_id)
+        if success:
+            print(f"[Window] Фокус установлен на окне '{window.title}' (ID: {window.window_id})")
+        else:
+            print(f"[Window] Не удалось установить фокус на окне '{window.title}'")
+        return success
+    except Exception as e:
+        print(f"[Window] Ошибка при фокусировке на окне: {e}")
+        return False
