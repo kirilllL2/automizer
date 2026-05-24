@@ -44,13 +44,9 @@ class ActionListWidget(QListWidget):
         """Настраивает контекстное меню."""
         self.context_menu = QMenu(self)
         
-        add_click_action = QAction("🖱️ Добавить клик", self)
-        add_click_action.triggered.connect(lambda: self.action_added.emit(ActionType.CLICK))
-        self.context_menu.addAction(add_click_action)
-        
-        add_delay_action = QAction("⏱️ Добавить задержку", self)
-        add_delay_action.triggered.connect(lambda: self.action_added.emit(ActionType.DELAY))
-        self.context_menu.addAction(add_delay_action)
+        add_action = QAction("➕ Добавить действие", self)
+        add_action.triggered.connect(lambda: self.action_added.emit(None))
+        self.context_menu.addAction(add_action)
         
         self.context_menu.addSeparator()
         
@@ -116,9 +112,9 @@ class ActionEditorDialog(QDialog):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(ModernStyle.SPACING)
-        layout.setContentsMargins(ModernStyle.PADDING, ModernStyle.PADDING,
-                                   ModernStyle.PADDING, ModernStyle.PADDING)
+        layout.setSpacing(ModernStyle.SPACING_SMALL)
+        layout.setContentsMargins(ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL,
+                                   ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL)
         
         # Карточка редактора
         editor_card = QFrame()
@@ -131,7 +127,7 @@ class ActionEditorDialog(QDialog):
         
         # Форма редактирования
         self.form_layout = QFormLayout()
-        self.form_layout.setSpacing(8)
+        self.form_layout.setSpacing(6)
         
         # Название действия
         self.name_input = QLineEdit()
@@ -150,7 +146,7 @@ class ActionEditorDialog(QDialog):
         # Контейнер для специфичных полей
         self.specific_fields_widget = QWidget()
         self.specific_layout = QVBoxLayout(self.specific_fields_widget)
-        self.specific_layout.setContentsMargins(0, 8, 0, 0)
+        self.specific_layout.setContentsMargins(0, 6, 0, 0)
         self.form_layout.addRow("", self.specific_fields_widget)
         
         editor_layout.addLayout(self.form_layout)
@@ -174,7 +170,7 @@ class ActionEditorDialog(QDialog):
     def _setup_click_fields(self):
         """Настраивает поля для действия клика."""
         grid = QGridLayout()
-        grid.setSpacing(8)
+        grid.setSpacing(6)
         
         x_label = QLabel("X:")
         x_label.setObjectName("fieldLabel")
@@ -245,9 +241,9 @@ class MacroEditorWindow(QDialog):
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
-        layout.setSpacing(ModernStyle.SPACING)
-        layout.setContentsMargins(ModernStyle.PADDING, ModernStyle.PADDING,
-                                   ModernStyle.PADDING, ModernStyle.PADDING)
+        layout.setSpacing(ModernStyle.SPACING_SMALL)
+        layout.setContentsMargins(ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL,
+                                   ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL)
         
         # Заголовок
         title = QLabel("📝 Редактор макроса")
@@ -258,7 +254,7 @@ class MacroEditorWindow(QDialog):
         info_card = QFrame()
         info_card.setObjectName("card")
         info_layout = QGridLayout(info_card)
-        info_layout.setSpacing(8)
+        info_layout.setSpacing(6)
         
         info_layout.addWidget(QLabel("Название:"), 0, 0)
         self.macro_name_input = QLineEdit()
@@ -281,14 +277,15 @@ class MacroEditorWindow(QDialog):
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(ModernStyle.SPACING_SMALL)
         
-        actions_title = QLabel("📋 Действия (перетаскивайте для перемещения)")
+        actions_title = QLabel("📋 Действия")
         actions_title.setObjectName("sectionTitle")
         left_layout.addWidget(actions_title)
         
         # Список действий
         self.action_list = ActionListWidget()
-        self.action_list.setMinimumWidth(300)
+        self.action_list.setMinimumWidth(280)
         self.action_list.action_selected.connect(self._on_action_selected)
         self.action_list.action_double_clicked_signal.connect(self._edit_action_dialog)
         self.action_list.action_moved.connect(self._on_action_moved)
@@ -296,39 +293,43 @@ class MacroEditorWindow(QDialog):
         self.action_list.action_delete_requested.connect(self._delete_action)
         left_layout.addWidget(self.action_list)
         
-        # Кнопки управления действиями (компактные)
+        # Компактные кнопки управления действиями
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(6)
+        btn_layout.setSpacing(4)
         
         self.add_btn = QPushButton("+")
         self.add_btn.setObjectName("secondaryBtn")
         self.add_btn.setToolTip("Добавить действие (ПКМ для выбора)")
-        self.add_btn.setFixedWidth(30)
+        self.add_btn.setFixedWidth(28)
+        self.add_btn.setMaximumHeight(28)
         btn_layout.addWidget(self.add_btn)
         
         self.move_up_btn = QPushButton("⬆")
         self.move_up_btn.setObjectName("secondaryBtn")
         self.move_up_btn.setToolTip("Переместить вверх")
-        self.move_up_btn.setFixedWidth(30)
+        self.move_up_btn.setFixedWidth(28)
+        self.move_up_btn.setMaximumHeight(28)
         self.move_up_btn.clicked.connect(self._move_action_up)
         btn_layout.addWidget(self.move_up_btn)
         
         self.move_down_btn = QPushButton("⬇")
         self.move_down_btn.setObjectName("secondaryBtn")
         self.move_down_btn.setToolTip("Переместить вниз")
-        self.move_down_btn.setFixedWidth(30)
+        self.move_down_btn.setFixedWidth(28)
+        self.move_down_btn.setMaximumHeight(28)
         self.move_down_btn.clicked.connect(self._move_action_down)
         btn_layout.addWidget(self.move_down_btn)
         
         self.delete_action_btn = QPushButton("🗑")
         self.delete_action_btn.setObjectName("dangerBtn")
         self.delete_action_btn.setToolTip("Удалить действие")
-        self.delete_action_btn.setFixedWidth(30)
+        self.delete_action_btn.setFixedWidth(28)
+        self.delete_action_btn.setMaximumHeight(28)
         self.delete_action_btn.clicked.connect(self._delete_action)
         btn_layout.addWidget(self.delete_action_btn)
         
-        hint_label = QLabel("💡 ПКМ для добавления/удаления, двойной клик для редактирования")
-        hint_label.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY}; font-size: 11px;")
+        hint_label = QLabel("💡 ПКМ: добавить/удалить | Двойной клик: редактировать")
+        hint_label.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY}; font-size: 10px;")
         btn_layout.addWidget(hint_label)
         
         btn_layout.addStretch()
@@ -340,6 +341,7 @@ class MacroEditorWindow(QDialog):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(ModernStyle.SPACING_SMALL)
         
         details_title = QLabel("ℹ️ Детали действия")
         details_title.setObjectName("sectionTitle")
@@ -347,7 +349,7 @@ class MacroEditorWindow(QDialog):
         
         self.details_label = QLabel("Выберите действие для просмотра деталей\n\nДвойной клик для редактирования")
         self.details_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.details_label.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY}; padding: 20px;")
+        self.details_label.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY}; padding: 15px;")
         right_layout.addWidget(self.details_label)
         
         right_layout.addStretch()
@@ -359,14 +361,14 @@ class MacroEditorWindow(QDialog):
         
         # Кнопки сохранения
         save_layout = QHBoxLayout()
-        save_layout.setSpacing(12)
+        save_layout.setSpacing(8)
         
-        self.save_btn = QPushButton("💾 Сохранить макрос")
+        self.save_btn = QPushButton("💾 Сохранить")
         self.save_btn.setObjectName("successBtn")
         self.save_btn.clicked.connect(self._save_macro)
         save_layout.addWidget(self.save_btn)
         
-        self.delete_macro_btn = QPushButton("🗑️ Удалить макрос")
+        self.delete_macro_btn = QPushButton("🗑️ Удалить")
         self.delete_macro_btn.setObjectName("dangerBtn")
         self.delete_macro_btn.clicked.connect(self._delete_macro)
         save_layout.addWidget(self.delete_macro_btn)
@@ -397,22 +399,22 @@ class MacroEditorWindow(QDialog):
         elif isinstance(action, DelayAction):
             details += f"<p><b>Длительность:</b> {action.duration} сек.</p>"
         
-        details += "<p style='margin-top: 20px; color: #7f8af4;'>💡 Двойной клик для редактирования</p>"
-        
         self.details_label.setText(details)
-        self.details_label.setStyleSheet(f"""
-            color: {ModernStyle.TEXT_PRIMARY}; 
-            padding: 20px; 
-            background-color: {ModernStyle.BG_PRIMARY};
-            border-radius: {ModernStyle.BORDER_RADIUS}px;
+        self.details_label.setStyleSheet("""
+            QLabel {
+                background: white;
+                border-radius: 8px;
+                padding: 15px;
+                border: 1px solid #e0e0e0;
+            }
         """)
     
     def _edit_action_dialog(self, action: MacroAction):
         """Открывает диалог редактирования действия."""
         dialog = ActionEditorDialog(action, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            # Обновляем отображение в списке
             self.action_list.set_actions(self.macro.actions)
+            self._on_action_selected(action)
     
     def _on_action_moved(self, from_index: int, to_index: int):
         """Действие перемещено."""
@@ -422,14 +424,17 @@ class MacroEditorWindow(QDialog):
         )
         self.action_list.set_actions(self.macro.actions)
     
-    def _add_action_by_type(self, action_type: ActionType):
-        """Добавляет действие указанного типа."""
-        if action_type == ActionType.CLICK:
-            action = create_action(ActionType.CLICK, "Клик", x=100, y=100)
-        else:
-            action = create_action(ActionType.DELAY, "Задержка", duration=1.0)
-        self.macro.add_action(action)
-        self.action_list.set_actions(self.macro.actions)
+    def _add_action_by_type(self, action_type: ActionType | None):
+        """Добавляет новое действие с выбором типа через диалог."""
+        dialog = QActionTypeDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            selected_type = dialog.get_selected_type()
+            if selected_type == ActionType.CLICK:
+                action = create_action(ActionType.CLICK, "Клик", x=100, y=100)
+            else:
+                action = create_action(ActionType.DELAY, "Задержка", duration=1.0)
+            self.macro.add_action(action)
+            self.action_list.set_actions(self.macro.actions)
     
     def _move_action_up(self):
         """Перемещает действие вверх."""
