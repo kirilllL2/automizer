@@ -23,6 +23,8 @@ from src.macro.actions import (
     get_screen_size,
     create_region_from_center,
     focus_window,
+    click_in_window_region,
+    find_window_by_process,
 )
 
 

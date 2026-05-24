@@ -13,6 +13,13 @@ from pathlib import Path
 
 from src.config import get_config
 
+# Импортируем win32gui для работы с окнами Windows
+try:
+    import win32gui
+    WIN32_AVAILABLE = True
+except ImportError:
+    WIN32_AVAILABLE = False
+
 
 # ============================================================================
 # Типы данных
@@ -451,20 +458,6 @@ def create_region_from_center(
     return Region(x1, y1, x2, y2)
 
 
-# Экспортируем основные функции для удобного импорта
-__all__ = [
-    'Region',
-    'click',
-    'click_in_region',
-    'find_region',
-    'find_all_regions',
-    'wait_for_region',
-    'get_screen_size',
-    'create_region_from_center',
-    'focus_window',
-]
-
-
 # ============================================================================
 # Функции управления окнами
 # ============================================================================
@@ -510,3 +503,118 @@ def focus_window(process_preset_id: str) -> bool:
     except Exception as e:
         print(f"[Window] Ошибка при фокусировке на окне: {e}")
         return False
+
+
+def click_in_window_region(
+    window_id: int,
+    region: Region,
+    percent: Optional[float] = None,
+    distribution: str = "uniform"
+):
+    """
+    Выполняет клик в случайное место внутри области окна используя низкоуровневое взаимодействие.
+    
+    Args:
+        window_id: Handle окна.
+        region: Область для клика.
+        percent: Процент от центра области (0.0 - 1.0). 
+                 Если None, берется из конфигурации (macros.default_click_percent).
+                 0.0 = вся область, 1.0 = только центр.
+        distribution: Тип распределения ("uniform" или "gaussian").
+    
+    Raises:
+        ValueError: Если percent вне диапазона [0.0, 1.0].
+    """
+    from src.window_manager import WindowManager
+    
+    # Получаем процент из конфига если не указан
+    if percent is None:
+        percent = get_config().get("macros", "default_click_percent", default=0.3)
+    
+    if not 0.0 <= percent <= 1.0:
+        raise ValueError(f"percent должен быть в диапазоне [0.0, 1.0], получено {percent}")
+    
+    cx, cy = region.center
+    half_width = region.width // 2
+    half_height = region.height // 2
+    
+    # Вычисляем размер области для клика на основе процента
+    effective_half_width = int(half_width * (1.0 - percent))
+    effective_half_height = int(half_height * (1.0 - percent))
+    
+    if distribution == "uniform":
+        # Равномерное распределение
+        x = random.randint(cx - effective_half_width, cx + effective_half_width)
+        y = random.randint(cy - effective_half_height, cy + effective_half_height)
+    elif distribution == "gaussian":
+        # Гауссово распределение (больше кликов ближе к центру)
+        x = int(random.gauss(cx, effective_half_width / 3))
+        y = int(random.gauss(cy, effective_half_height / 3))
+        # Ограничиваем пределами области
+        x = max(region.x1, min(region.x2, x))
+        y = max(region.y1, min(region.y2, y))
+    else:
+        raise ValueError(f"Неизвестный тип распределения: {distribution}")
+    
+    # Используем низкоуровневый клик через WindowManager
+    wm = WindowManager()
+    # Конвертируем абсолютные координаты экрана в относительные координаты окна
+    left, top, right, bottom = win32gui.GetWindowRect(window_id) if WIN32_AVAILABLE else (0, 0, region.x2, region.y2)
+    window_width = right - left
+    window_height = bottom - top
+    
+    rel_x = (x - left) / window_width if window_width > 0 else 0.5
+    rel_y = (y - top) / window_height if window_height > 0 else 0.5
+    
+    success = wm.click_in_window(window_id, rel_x, rel_y, percent)
+    if success:
+        print(f"[Action] Клик в окне в области {region} (относительные координаты: {rel_x:.2f}, {rel_y:.2f})")
+    else:
+        print(f"[Action] Ошибка клика в окне в области {region}")
+
+
+def find_window_by_process(process_preset_id: str) -> Optional[int]:
+    """
+    Находит окно по пресету процесса и возвращает его handle.
+    
+    Args:
+        process_preset_id: ID пресета процесса.
+    
+    Returns:
+        Handle окна или None, если окно не найдено.
+    """
+    from src.storage import PresetStorage
+    from src.normalizer import ProcessNormalizer
+    
+    preset_storage = PresetStorage()
+    preset_info = preset_storage.get_preset(process_preset_id)
+    
+    if not preset_info:
+        print(f"[Window] Пресет процесса '{process_preset_id}' не найден")
+        return None
+    
+    normalizer = ProcessNormalizer()
+    window = normalizer.find_window_by_process(preset_info.process_name)
+    
+    if not window:
+        print(f"[Window] Окно для процесса '{preset_info.process_name}' не найдено")
+        return None
+    
+    print(f"[Window] Найдено окно '{window.title}' (ID: {window.window_id})")
+    return window.window_id
+
+
+# Экспортируем основные функции для удобного импорта
+__all__ = [
+    'Region',
+    'click',
+    'click_in_region',
+    'find_region',
+    'find_all_regions',
+    'wait_for_region',
+    'get_screen_size',
+    'create_region_from_center',
+    'focus_window',
+    'click_in_window_region',
+    'find_window_by_process',
+]

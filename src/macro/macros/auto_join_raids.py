@@ -21,6 +21,8 @@ from src.macro import (
     find_region,
     focus_window,
     delay,
+    find_window_by_process,
+    click_in_window_region,
 )
 
 
@@ -31,10 +33,16 @@ def run():
     """
     print("Начало выполнения макроса 'Авто-присоединение к рейдам'")
     
-    # Шаг 1: Фокус на окне процесса
+    # Шаг 1: Фокус на окне процесса и получаем его handle
     print("[Шаг 1] Фокусировка на окне процесса...")
     if not focus_window("tilesauto"):
         print("[Ошибка] Не удалось сфокусироваться на окне. Прерывание макроса.")
+        return
+    
+    # Получаем handle окна для низкоуровневых операций
+    window_id = find_window_by_process("tilesauto")
+    if not window_id:
+        print("[Ошибка] Не удалось получить handle окна. Прерывание макроса.")
         return
     
     # Небольшая задержка после фокуса
@@ -50,9 +58,9 @@ def run():
     
     print(f"[Успех] Кнопка альянса найдена: {aliance_btn_region}")
     
-    # Шаг 3: Кликнуть в области кнопки альянса (используется default_click_percent из конфига)
-    print("[Шаг 3] Клик по кнопке альянса...")
-    click_in_region(aliance_btn_region)
+    # Шаг 3: Кликнуть в области кнопки альянса через низкоуровневый клик
+    print("[Шаг 3] Клик по кнопке альянса (низкоуровневый)...")
+    click_in_window_region(window_id, aliance_btn_region)
     
     # Задержка для открытия окна альянса
     delay(1.0)
@@ -67,9 +75,9 @@ def run():
     
     print(f"[Успех] Кнопка новостей найдена: {aliance_news_region}")
     
-    # Кликнуть в области кнопки новостей
-    print("[Шаг 5] Клик по кнопке новостей...")
-    click_in_region(aliance_news_region)
+    # Кликнуть в области кнопки новостей через низкоуровневый клик
+    print("[Шаг 5] Клик по кнопке новостей (низкоуровневый)...")
+    click_in_window_region(window_id, aliance_news_region)
     
     # Задержка для загрузки вкладки
     delay(1.0)
@@ -92,9 +100,9 @@ def run():
             print("[Ошибка] Кнопка переключения на рейды не найдена.")
             return
         
-        # Кликаем на неактивную кнопку рейдов
-        print("[Шаг 7] Клик по кнопке 'рейды'...")
-        click_in_region(raids_unselected_region)
+        # Кликаем на неактивную кнопку рейдов через низкоуровневый клик
+        print("[Шаг 7] Клик по кнопке 'рейды' (низкоуровневый)...")
+        click_in_window_region(window_id, raids_unselected_region)
         
         # Задержка для переключения
         delay(0.5)
