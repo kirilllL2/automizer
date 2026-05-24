@@ -16,7 +16,7 @@ from src.macro import (
     Macro, MacroAction, ClickAction, DelayAction,
     ActionType, create_action
 )
-from src.ui.main_window import ModernStyle
+from src.ui.main_window import ModernStyle, apply_modern_style
 
 
 class ActionListWidget(QListWidget):

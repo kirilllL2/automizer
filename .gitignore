@@ -1,1 +1,1 @@
-Nothing needs to be added to the .gitignore file based on the provided changes. The listed files are all source code files (.py) that should be tracked in version control.
+(src/ui/macro_editor_window.py)
