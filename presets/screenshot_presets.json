@@ -101,7 +101,7 @@
     "height": 30,
     "description": "",
     "use_relative_coords": true,
-    "window_id": 658294
+    "window_id": 852732
   },
   "aliance_news_raids-empty_raids": {
     "id": "aliance_news_raids-empty_raids",
@@ -150,6 +150,19 @@
     "x": 270,
     "y": 790,
     "width": 350,
+    "height": 30,
+    "description": "",
+    "use_relative_coords": false,
+    "window_id": null
+  },
+  "join_raid-speed_cancel": {
+    "id": "join_raid-speed_cancel",
+    "name": "join_raid-speed_cancel",
+    "screenshot_path": "presets/screenshots/join_raid-speed_cancel.png",
+    "process_preset_id": "tilesauto",
+    "x": 550,
+    "y": 650,
+    "width": 100,
     "height": 30,
     "description": "",
     "use_relative_coords": false,
