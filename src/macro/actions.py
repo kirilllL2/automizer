@@ -74,53 +74,36 @@ class Region:
 
 def click(x: int, y: int):
     """
-    Выполняет клик в указанную точку.
+    Выполняет клик в указанную точку с использованием Windows API.
     
     Args:
         x: Координата X.
         y: Координата Y.
     """
     try:
-        from PyQt6.QtGui import QCursor
-        from PyQt6.QtCore import QPoint, QPointF
-        from PyQt6.QtWidgets import QApplication
+        import ctypes
+        from ctypes import wintypes
         
-        # Получаем или создаем приложение
-        app = QApplication.instance()
-        if app is None:
-            app = QApplication([])
+        # Константы Windows
+        MOUSEEVENTF_MOVE = 0x0001
+        MOUSEEVENTF_LEFTDOWN = 0x0002
+        MOUSEEVENTF_LEFTUP = 0x0004
         
-        cursor = QCursor()
-        cursor.setPos(QPoint(x, y))
+        # Структуры для SetCursorPos
+        class POINT(ctypes.Structure):
+            _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
         
-        # Симуляция клика левой кнопкой мыши
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtGui import QMouseEvent
+        # Перемещаем курсор
+        ctypes.windll.user32.SetCursorPos(x, y)
         
-        # Отправляем события нажатия и отпускания кнопки
-        QApplication.sendEvent(
-            app.focusWidget() if app.focusWidget() else app.activeWindow(),
-            QMouseEvent(
-                QMouseEvent.Type.MouseButtonPress,
-                QPointF(x, y),
-                Qt.MouseButton.LeftButton,
-                Qt.MouseButton.LeftButton,
-                Qt.KeyboardModifier.NoModifier
-            )
-        )
-        QApplication.sendEvent(
-            app.focusWidget() if app.focusWidget() else app.activeWindow(),
-            QMouseEvent(
-                QMouseEvent.Type.MouseButtonRelease,
-                QPointF(x, y),
-                Qt.MouseButton.LeftButton,
-                Qt.MouseButton.LeftButton,
-                Qt.KeyboardModifier.NoModifier
-            )
-        )
+        # Симулируем клик левой кнопкой мыши
+        ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+        ctypes.windll.user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
         
         print(f"[Action] Клик в точке ({x}, {y})")
-    except ImportError:
+    except Exception as e:
+        print(f"[Action] Ошибка клика в точке ({x}, {y}): {e}")
+        # Fallback на симуляцию
         print(f"[Action] Клик в точке ({x}, {y}) (симуляция)")
 
 
