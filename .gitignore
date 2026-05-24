@@ -1,23 +1,9 @@
 ```
 # Compiled Python files
-__pycache__/
 *.pyc
-*.pyo
-*.pyd
+__pycache__/
 
-# Dependencies
-.venv/
-venv/
-env/
-node_modules/
-
-# Build artifacts
-dist/
-build/
-target/
-*.egg-info/
-
-# Logs and temporary files
+# Logs and temp files
 *.log
 *.tmp
 *.swp
@@ -30,19 +16,27 @@ target/
 # Editors
 .vscode/
 .idea/
-*.swo
-*.swn
 
-# OS generated files
-.DS_Store
-Thumbs.db
+# Dependencies
+.venv/
+venv/
+node_modules/
+
+# Build artifacts
+dist/
+build/
+target/
 
 # Coverage reports
-.coverage
 coverage/
 htmlcov/
+.coverage
 
-# Type checking cache
+# Testing
 .mypy_cache/
 .pytest_cache/
+
+# System files
+.DS_Store
+Thumbs.db
 ```

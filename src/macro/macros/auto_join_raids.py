@@ -12,8 +12,8 @@
 8. Запустить цикл поиска рейдов (каждые 15 секунд):
    - Искать кнопку присоединения (aliance_news_raids-can_join_raid)
    - Если найдена - кликнуть, затем найти кнопку отправки (join_raid-send) и кликнуть
-   - Затем нажать на кнопку "Выбранных рейдов" (join_raid-all_sended)
-   - Если какую-то кнопку не удалось найти - кликнуть в случайном месте в области рейдов
+   - Затем нажать на кнопку "Выбранных рейдов" (aliance_news_raids-selected)
+   - Если какую-то кнопку не удалось найти - кликнуть на вкладку рейдов
 """
 
 # Метаданные макроса
@@ -28,7 +28,6 @@ from src.macro import (
     delay,
     find_window_by_process,
     click_in_window_region,
-    Region,
 )
 import random
 import time
@@ -49,38 +48,36 @@ signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
 
-def get_raids_search_region(window_id: int) -> Region:
+def click_on_raids_tab(window_id: int):
     """
-    Возвращает область для поиска рейдов на основе положения элементов интерфейса.
-    Использует координаты известных элементов для определения области вкладки рейдов.
-    """
-    # Примерные координаты области контента рейдов (на основе пресетов)
-    # aliance_news_raids-empty_raids имеет x: 250, y: 300
-    # join_raid-send имеет x: 480, y: 767
-    # Создаем область, охватывающую основную часть вкладки рейдов
-    return Region(x1=200, y1=150, x2=800, y2=850)
-
-
-def click_random_in_raids_region(window_id: int, raids_region: Region):
-    """
-    Кликает в случайное место в области вкладки с рейдами.
+    Кликает на вкладку рейдов (кнопку aliance_news_raids-unselected или aliance_news_raids-selected).
     
     Args:
         window_id: Handle окна.
-        raids_region: Область для случайного клика.
     """
-    print("[Инфо] Клик в случайном месте области рейдов...")
-    click_in_window_region(window_id, raids_region, percent=0.5, distribution="uniform")
-    delay(0.5)
+    print("[Инфо] Клик по вкладке рейдов...")
+    
+    # Сначала пробуем найти неактивную кнопку рейдов
+    raids_region = find_region("aliance_news_raids-unselected")
+    
+    if not raids_region:
+        # Если не найдена, пробуем найти активную кнопку
+        raids_region = find_region("aliance_news_raids-selected")
+    
+    if raids_region:
+        click_in_window_region(window_id, raids_region)
+        delay(0.5)
+        print("[Инфо] Успешный клик по вкладке рейдов")
+    else:
+        print("[Предупреждение] Не удалось найти кнопку вкладки рейдов")
 
 
-def try_join_raid(window_id: int, raids_region: Region) -> bool:
+def try_join_raid(window_id: int) -> bool:
     """
     Пытается присоединиться к рейду.
     
     Args:
         window_id: Handle окна.
-        raids_region: Область вкладки рейдов для fallback кликов.
     
     Returns:
         True, если успешно присоединился, False иначе.
@@ -91,8 +88,8 @@ def try_join_raid(window_id: int, raids_region: Region) -> bool:
     can_join_region = find_region("aliance_news_raids-can_join_raid")
     
     if not can_join_region:
-        print("[Цикл] Кнопка присоединения не найдена, клик в случайном месте")
-        click_random_in_raids_region(window_id, raids_region)
+        print("[Цикл] Кнопка присоединения не найдена, клик по вкладке рейдов")
+        click_on_raids_tab(window_id)
         return False
     
     print(f"[Цикл] Найдена кнопка присоединения: {can_join_region}")
@@ -106,8 +103,8 @@ def try_join_raid(window_id: int, raids_region: Region) -> bool:
     send_region = find_region("join_raid-send")
     
     if not send_region:
-        print("[Цикл] Кнопка отправки не найдена, клик в случайном месте")
-        click_random_in_raids_region(window_id, raids_region)
+        print("[Цикл] Кнопка отправки не найдена, клик по вкладке рейдов")
+        click_on_raids_tab(window_id)
         return False
     
     print(f"[Цикл] Найдена кнопка отправки: {send_region}")
@@ -121,8 +118,8 @@ def try_join_raid(window_id: int, raids_region: Region) -> bool:
     all_sended_region = find_region("aliance_news_raids-selected")
     
     if not all_sended_region:
-        print("[Цикл] Кнопка 'Выбранных рейдов' не найдена, клик в случайном месте")
-        click_random_in_raids_region(window_id, raids_region)
+        print("[Цикл] Кнопка 'Выбранных рейдов' не найдена, клик по вкладке рейдов")
+        click_on_raids_tab(window_id)
         return False
     
     print(f"[Цикл] Найдена кнопка 'Выбранных рейдов': {all_sended_region}")
@@ -222,10 +219,6 @@ def run():
     print("Рейды открыты")
     print("=" * 50)
     
-    # Определяем область рейдов для fallback кликов
-    raids_search_region = get_raids_search_region(window_id)
-    print(f"[Инфо] Область поиска рейдов: {raids_search_region}")
-    
     # Запуск цикла поиска рейдов
     print("=" * 50)
     print("Запуск цикла поиска рейдов (каждые 15 секунд)")
@@ -237,7 +230,7 @@ def run():
         print(f"\n[Цикл] === Итерация {iteration} ===")
         
         # Пытаемся присоединиться к рейду
-        success = try_join_raid(window_id, raids_search_region)
+        success = try_join_raid(window_id)
         
         if success:
             print("[Цикл] Рейд найден и присоединение выполнено!")
@@ -256,3 +249,7 @@ def run():
             print()  # Новая строка после обратного отсчета
     
     print("\n[Инфо] Макрос завершен.")
+    
+    # Удаляем обработчики сигналов при выходе
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, signal.SIG_DFL)
