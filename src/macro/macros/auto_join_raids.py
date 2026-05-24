@@ -32,6 +32,21 @@ from src.macro import (
 )
 import random
 import time
+import signal
+import sys
+
+# Флаг для контроля остановки скрипта
+stop_requested = False
+
+def signal_handler(signum, frame):
+    """Обработчик сигнала прерывания (Ctrl+C)"""
+    global stop_requested
+    print("\n[Инфо] Получен сигнал остановки. Завершаем работу...")
+    stop_requested = True
+
+# Регистрируем обработчик сигнала
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 
 def get_raids_search_region(window_id: int) -> Region:
@@ -101,9 +116,9 @@ def try_join_raid(window_id: int, raids_region: Region) -> bool:
     click_in_window_region(window_id, send_region)
     delay(1.0)
     
-    # Шаг 3: Ищем кнопку "Выбранных рейдов" (join_raid-all_sended)
+    # Шаг 3: Ищем кнопку "Выбранных рейдов" (aliance_news_raids-selected)
     print("[Цикл] Поиск кнопки 'Выбранных рейдов'...")
-    all_sended_region = find_region("join_raid-all_sended")
+    all_sended_region = find_region("aliance_news_raids-selected")
     
     if not all_sended_region:
         print("[Цикл] Кнопка 'Выбранных рейдов' не найдена, клик в случайном месте")
@@ -217,7 +232,7 @@ def run():
     print("=" * 50)
     
     iteration = 0
-    while True:
+    while not stop_requested:
         iteration += 1
         print(f"\n[Цикл] === Итерация {iteration} ===")
         
@@ -232,6 +247,12 @@ def run():
         # Ждем 15 секунд перед следующей проверкой
         print(f"[Цикл] Ожидание 15 секунд до следующей проверки...")
         for i in range(15, 0, -1):
+            if stop_requested:
+                break
             print(f"[Цикл] Осталось секунд: {i}", end="\r")
             time.sleep(1)
-        print()  # Новая строка после обратного отсчета
+        
+        if not stop_requested:
+            print()  # Новая строка после обратного отсчета
+    
+    print("\n[Инфо] Макрос завершен.")
