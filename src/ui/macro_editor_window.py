@@ -7,16 +7,79 @@ from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QFrame, QGridLayout, QFormLayout, QSpinBox, QComboBox, QLineEdit, 
     QDoubleSpinBox, QListWidget, QListWidgetItem, QAbstractItemView,
-    QMessageBox, QSplitter, QMenu
+    QMessageBox, QSplitter, QMenu, QDialogButtonBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QCursor, QAction
+from PyQt6.QtGui import QCursor, QAction, QFont
 
 from src.macro import (
     Macro, MacroAction, ClickAction, DelayAction,
     ActionType, create_action
 )
 from src.ui.main_window import ModernStyle, apply_modern_style
+
+
+class QActionTypeDialog(QDialog):
+    """Диалог выбора типа действия."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Выберите тип действия")
+        self.setMinimumSize(350, 200)
+        self.selected_type: ActionType | None = None
+        self._setup_ui()
+        apply_modern_style(self)
+    
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(ModernStyle.SPACING_SMALL)
+        layout.setContentsMargins(ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL,
+                                   ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL)
+        
+        title = QLabel("➕ Добавьте действие")
+        title.setObjectName("titleLabel")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        subtitle = QLabel("Выберите тип действия для добавления:")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        subtitle.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY};")
+        layout.addWidget(subtitle)
+        
+        # Кнопки выбора типа действия
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(ModernStyle.SPACING_SMALL)
+        
+        # Кнопка клика
+        click_btn = QPushButton("🖱️ Клик\nв точку")
+        click_btn.setObjectName("card")
+        click_btn.setMinimumHeight(100)
+        click_btn.setMinimumWidth(120)
+        click_btn.setFont(QFont("", 11))
+        click_btn.clicked.connect(lambda: self._select_type(ActionType.CLICK))
+        buttons_layout.addWidget(click_btn)
+        
+        # Кнопка задержки
+        delay_btn = QPushButton("⏱️ Задержка\nна время")
+        delay_btn.setObjectName("card")
+        delay_btn.setMinimumHeight(100)
+        delay_btn.setMinimumWidth(120)
+        delay_btn.setFont(QFont("", 11))
+        delay_btn.clicked.connect(lambda: self._select_type(ActionType.DELAY))
+        buttons_layout.addWidget(delay_btn)
+        
+        layout.addLayout(buttons_layout)
+        layout.addStretch()
+        
+        # Кнопка отмены
+        cancel_btn = QPushButton("✕ Отмена")
+        cancel_btn.setObjectName("secondaryBtn")
+        cancel_btn.clicked.connect(self.reject)
+        layout.addWidget(cancel_btn)
+    
+    def _select_type(self, action_type: ActionType):
+        self.selected_type = action_type
+        self.accept()
 
 
 class ActionListWidget(QListWidget):
@@ -245,27 +308,34 @@ class MacroEditorWindow(QDialog):
         layout.setContentsMargins(ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL,
                                    ModernStyle.PADDING_SMALL, ModernStyle.PADDING_SMALL)
         
-        # Заголовок
+        # Заголовок - компактный
         title = QLabel("📝 Редактор макроса")
-        title.setObjectName("titleLabel")
+        title.setObjectName("sectionTitle")
         layout.addWidget(title)
         
-        # Информация о макросе
+        # Информация о макросе - компактная
         info_card = QFrame()
         info_card.setObjectName("card")
         info_layout = QGridLayout(info_card)
-        info_layout.setSpacing(6)
+        info_layout.setSpacing(ModernStyle.SPACING_TINY)
+        info_layout.setContentsMargins(8, 8, 8, 8)
         
-        info_layout.addWidget(QLabel("Название:"), 0, 0)
+        name_label = QLabel("Название:")
+        name_label.setStyleSheet(f"font-size: 11px; color: {ModernStyle.TEXT_SECONDARY};")
+        info_layout.addWidget(name_label, 0, 0)
         self.macro_name_input = QLineEdit()
         self.macro_name_input.setPlaceholderText("Название макроса")
         self.macro_name_input.setText(self.macro.name)
+        self.macro_name_input.setStyleSheet("font-size: 11px; padding: 4px;")
         info_layout.addWidget(self.macro_name_input, 0, 1)
         
-        info_layout.addWidget(QLabel("Описание:"), 1, 0)
+        desc_label = QLabel("Описание:")
+        desc_label.setStyleSheet(f"font-size: 11px; color: {ModernStyle.TEXT_SECONDARY};")
+        info_layout.addWidget(desc_label, 1, 0)
         self.macro_desc_input = QLineEdit()
         self.macro_desc_input.setPlaceholderText("Описание макроса")
         self.macro_desc_input.setText(self.macro.description)
+        self.macro_desc_input.setStyleSheet("font-size: 11px; padding: 4px;")
         info_layout.addWidget(self.macro_desc_input, 1, 1)
         
         layout.addWidget(info_card)
@@ -293,42 +363,42 @@ class MacroEditorWindow(QDialog):
         self.action_list.action_delete_requested.connect(self._delete_action)
         left_layout.addWidget(self.action_list)
         
-        # Компактные кнопки управления действиями
+        # Компактные кнопки управления действиями - квадратные с иконками
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(4)
+        btn_layout.setSpacing(6)
         
-        self.add_btn = QPushButton("+")
+        self.add_btn = QPushButton("➕")
         self.add_btn.setObjectName("secondaryBtn")
         self.add_btn.setToolTip("Добавить действие (ПКМ для выбора)")
-        self.add_btn.setFixedWidth(28)
-        self.add_btn.setMaximumHeight(28)
+        self.add_btn.setFixedSize(32, 32)
+        self.add_btn.setFont(QFont("", 14))
         btn_layout.addWidget(self.add_btn)
         
-        self.move_up_btn = QPushButton("⬆")
+        self.move_up_btn = QPushButton("⬆️")
         self.move_up_btn.setObjectName("secondaryBtn")
         self.move_up_btn.setToolTip("Переместить вверх")
-        self.move_up_btn.setFixedWidth(28)
-        self.move_up_btn.setMaximumHeight(28)
+        self.move_up_btn.setFixedSize(32, 32)
+        self.move_up_btn.setFont(QFont("", 12))
         self.move_up_btn.clicked.connect(self._move_action_up)
         btn_layout.addWidget(self.move_up_btn)
         
-        self.move_down_btn = QPushButton("⬇")
+        self.move_down_btn = QPushButton("⬇️")
         self.move_down_btn.setObjectName("secondaryBtn")
         self.move_down_btn.setToolTip("Переместить вниз")
-        self.move_down_btn.setFixedWidth(28)
-        self.move_down_btn.setMaximumHeight(28)
+        self.move_down_btn.setFixedSize(32, 32)
+        self.move_down_btn.setFont(QFont("", 12))
         self.move_down_btn.clicked.connect(self._move_action_down)
         btn_layout.addWidget(self.move_down_btn)
         
-        self.delete_action_btn = QPushButton("🗑")
+        self.delete_action_btn = QPushButton("🗑️")
         self.delete_action_btn.setObjectName("dangerBtn")
         self.delete_action_btn.setToolTip("Удалить действие")
-        self.delete_action_btn.setFixedWidth(28)
-        self.delete_action_btn.setMaximumHeight(28)
+        self.delete_action_btn.setFixedSize(32, 32)
+        self.delete_action_btn.setFont(QFont("", 12))
         self.delete_action_btn.clicked.connect(self._delete_action)
         btn_layout.addWidget(self.delete_action_btn)
         
-        hint_label = QLabel("💡 ПКМ: добавить/удалить | Двойной клик: редактировать")
+        hint_label = QLabel("💡 ПКМ: добавить | Двойной клик: редактировать")
         hint_label.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY}; font-size: 10px;")
         btn_layout.addWidget(hint_label)
         
@@ -428,7 +498,7 @@ class MacroEditorWindow(QDialog):
         """Добавляет новое действие с выбором типа через диалог."""
         dialog = QActionTypeDialog(self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            selected_type = dialog.get_selected_type()
+            selected_type = dialog.selected_type
             if selected_type == ActionType.CLICK:
                 action = create_action(ActionType.CLICK, "Клик", x=100, y=100)
             else:
