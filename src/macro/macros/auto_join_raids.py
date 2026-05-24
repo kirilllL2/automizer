@@ -14,6 +14,7 @@
    - Если найдена - кликнуть, затем найти кнопку отправки (join_raid-send) и кликнуть
    - Затем нажать на кнопку "Выбранных рейдов" (aliance_news_raids-selected)
    - Если какую-то кнопку не удалось найти - кликнуть на вкладку рейдов
+   - Если не нашлось изображение со вкладкой рейдов - нажать join_raid-speed_cancel и снова искать вкладку
 """
 
 # Метаданные макроса
@@ -31,29 +32,38 @@ from src.macro import (
 )
 import random
 import time
-import signal
-import sys
+import threading
 
 # Флаг для контроля остановки скрипта
 stop_requested = False
 
-def signal_handler(signum, frame):
-    """Обработчик сигнала прерывания (Ctrl+C)"""
+
+def check_stop_requested():
+    """Проверяет, запрошена ли остановка скрипта"""
+    return stop_requested
+
+
+def request_stop():
+    """Запрашивает остановку скрипта"""
     global stop_requested
-    print("\n[Инфо] Получен сигнал остановки. Завершаем работу...")
     stop_requested = True
 
-# Регистрируем обработчик сигнала
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
+
+def reset_stop_flag():
+    """Сбрасывает флаг остановки"""
+    global stop_requested
+    stop_requested = False
 
 
-def click_on_raids_tab(window_id: int):
+def click_on_raids_tab(window_id: int) -> bool:
     """
     Кликает на вкладку рейдов (кнопку aliance_news_raids-unselected или aliance_news_raids-selected).
     
     Args:
         window_id: Handle окна.
+    
+    Returns:
+        True, если успешно кликнул, False иначе.
     """
     print("[Инфо] Клик по вкладке рейдов...")
     
@@ -68,8 +78,41 @@ def click_on_raids_tab(window_id: int):
         click_in_window_region(window_id, raids_region)
         delay(0.5)
         print("[Инфо] Успешный клик по вкладке рейдов")
+        return True
     else:
         print("[Предупреждение] Не удалось найти кнопку вкладки рейдов")
+        return False
+
+
+def handle_speed_cancel(window_id: int):
+    """
+    Обрабатывает ситуацию, когда не нашлось изображение со вкладкой рейдов.
+    Нажимает на join_raid-speed_cancel и затем снова ищет вкладку с рейдами.
+    
+    Args:
+        window_id: Handle окна.
+    
+    Returns:
+        True, если успешно обработал, False иначе.
+    """
+    print("[Инфо] Вкладка рейдов не найдена, пытаемся нажать speed_cancel...")
+    
+    # Ищем кнопку speed_cancel
+    speed_cancel_region = find_region("join_raid-speed_cancel")
+    
+    if not speed_cancel_region:
+        print("[Предупреждение] Кнопка speed_cancel не найдена")
+        return False
+    
+    print(f"[Инфо] Найдена кнопка speed_cancel: {speed_cancel_region}")
+    
+    # Кликаем на speed_cancel
+    click_in_window_region(window_id, speed_cancel_region)
+    delay(1.0)
+    
+    # После нажатия speed_cancel снова пытаемся кликнуть на вкладку рейдов
+    print("[Инфо] Повторная попытка клика по вкладке рейдов после speed_cancel...")
+    return click_on_raids_tab(window_id)
 
 
 def try_join_raid(window_id: int) -> bool:
@@ -103,8 +146,9 @@ def try_join_raid(window_id: int) -> bool:
     send_region = find_region("join_raid-send")
     
     if not send_region:
-        print("[Цикл] Кнопка отправки не найдена, клик по вкладке рейдов")
-        click_on_raids_tab(window_id)
+        print("[Цикл] Кнопка отправки не найдена")
+        # Проверяем, есть ли кнопка speed_cancel и нажимаем её
+        handle_speed_cancel(window_id)
         return False
     
     print(f"[Цикл] Найдена кнопка отправки: {send_region}")
@@ -118,8 +162,9 @@ def try_join_raid(window_id: int) -> bool:
     all_sended_region = find_region("aliance_news_raids-selected")
     
     if not all_sended_region:
-        print("[Цикл] Кнопка 'Выбранных рейдов' не найдена, клик по вкладке рейдов")
-        click_on_raids_tab(window_id)
+        print("[Цикл] Кнопка 'Выбранных рейдов' не найдена")
+        # Проверяем, есть ли кнопка speed_cancel и нажимаем её
+        handle_speed_cancel(window_id)
         return False
     
     print(f"[Цикл] Найдена кнопка 'Выбранных рейдов': {all_sended_region}")
@@ -225,7 +270,7 @@ def run():
     print("=" * 50)
     
     iteration = 0
-    while not stop_requested:
+    while not check_stop_requested():
         iteration += 1
         print(f"\n[Цикл] === Итерация {iteration} ===")
         
@@ -240,16 +285,12 @@ def run():
         # Ждем 15 секунд перед следующей проверкой
         print(f"[Цикл] Ожидание 15 секунд до следующей проверки...")
         for i in range(15, 0, -1):
-            if stop_requested:
+            if check_stop_requested():
                 break
             print(f"[Цикл] Осталось секунд: {i}", end="\r")
             time.sleep(1)
         
-        if not stop_requested:
+        if not check_stop_requested():
             print()  # Новая строка после обратного отсчета
     
     print("\n[Инфо] Макрос завершен.")
-    
-    # Удаляем обработчики сигналов при выходе
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    signal.signal(signal.SIGTERM, signal.SIG_DFL)
