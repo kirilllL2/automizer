@@ -1,320 +1,175 @@
 """
-Модуль бизнес-логики для работы с макросами.
-Содержит модели действий, макросов и логику их выполнения.
+Модуль бизнес-логики для работы с макросами на основе Python-файлов.
+Макросы определяются как Python-файлы в папке macros/.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any, Optional
-from enum import Enum
-import time
-import json
+from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
-
-
-class ActionType(Enum):
-    """Типы доступных действий."""
-    CLICK = "click"
-    DELAY = "delay"
-
-
-@dataclass
-class MacroAction:
-    """Базовый класс действия макроса."""
-    id: str
-    action_type: ActionType
-    name: str
-    enabled: bool = True
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict[str, Any]:
-        """Сериализует действие в словарь."""
-        return {
-            "id": self.id,
-            "action_type": self.action_type.value,
-            "name": self.name,
-            "enabled": self.enabled,
-            "parameters": self.parameters
-        }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MacroAction":
-        """Десериализует действие из словаря."""
-        return cls(
-            id=data["id"],
-            action_type=ActionType(data["action_type"]),
-            name=data["name"],
-            enabled=data.get("enabled", True),
-            parameters=data.get("parameters", {})
-        )
+import importlib.util
+import sys
+import time
+import threading
 
 
 @dataclass
-class ClickAction(MacroAction):
-    """Действие: клик в определенную точку."""
-    x: int = 0
-    y: int = 0
-    
-    def __init__(self, id: str, name: str, enabled: bool = True, x: int = 0, y: int = 0):
-        super().__init__(id=id, action_type=ActionType.CLICK, name=name, enabled=enabled)
-        self.x = x
-        self.y = y
-        self.parameters = {"x": self.x, "y": self.y}
-    
-    def execute(self) -> bool:
-        """Выполняет клик в указанную точку."""
-        if not self.enabled:
-            return True
-        
-        try:
-            from PyQt6.QtGui import QCursor
-            from PyQt6.QtCore import QPoint
-            
-            cursor = QCursor()
-            cursor.setPos(QPoint(self.x, self.y))
-            # Симуляция клика будет добавлена позже
-            print(f"[ClickAction] Клик в точке ({self.x}, {self.y})")
-            return True
-        except ImportError:
-            # Если PyQt6 недоступен (тестирование без GUI)
-            print(f"[ClickAction] Клик в точке ({self.x}, {self.y}) (симуляция)")
-            return True
-        except Exception as e:
-            print(f"[ClickAction] Ошибка выполнения: {e}")
-            return False
-    
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["parameters"] = {"x": self.x, "y": self.y}
-        return data
-
-
-@dataclass
-class DelayAction(MacroAction):
-    """Действие: задержка на n секунд."""
-    duration: float = 1.0
-    
-    def __init__(self, id: str, name: str, enabled: bool = True, duration: float = 1.0):
-        super().__init__(id=id, action_type=ActionType.DELAY, name=name, enabled=enabled)
-        self.duration = duration
-        self.parameters = {"duration": self.duration}
-    
-    def execute(self) -> bool:
-        """Выполняет задержку."""
-        if not self.enabled:
-            return True
-        
-        try:
-            print(f"[DelayAction] Задержка на {self.duration} сек.")
-            time.sleep(self.duration)
-            return True
-        except Exception as e:
-            print(f"[DelayAction] Ошибка выполнения: {e}")
-            return False
-    
-    def to_dict(self) -> Dict[str, Any]:
-        data = super().to_dict()
-        data["parameters"] = {"duration": self.duration}
-        return data
-
-
-@dataclass
-class Macro:
-    """Макрос - последовательность действий."""
-    id: str
+class MacroInfo:
+    """Информация о макросе."""
+    id: str  # имя файла без .py
     name: str
     description: str = ""
-    actions: List[MacroAction] = field(default_factory=list)
-    created_at: float = field(default_factory=time.time)
-    updated_at: float = field(default_factory=time.time)
-    
-    def add_action(self, action: MacroAction, index: Optional[int] = None):
-        """Добавляет действие в макрос."""
-        if index is not None:
-            self.actions.insert(index, action)
-        else:
-            self.actions.append(action)
-        self.updated_at = time.time()
-    
-    def remove_action(self, action_id: str) -> bool:
-        """Удаляет действие по ID."""
-        for i, action in enumerate(self.actions):
-            if action.id == action_id:
-                self.actions.pop(i)
-                self.updated_at = time.time()
-                return True
-        return False
-    
-    def move_action(self, action_id: str, new_index: int) -> bool:
-        """Перемещает действие на новую позицию."""
-        for i, action in enumerate(self.actions):
-            if action.id == action_id:
-                action_obj = self.actions.pop(i)
-                if new_index < 0:
-                    new_index = 0
-                if new_index >= len(self.actions):
-                    new_index = len(self.actions)
-                self.actions.insert(new_index, action_obj)
-                self.updated_at = time.time()
-                return True
-        return False
-    
-    def execute(self) -> bool:
-        """Выполняет все действия макроса последовательно."""
-        print(f"[Macro] Запуск макроса '{self.name}'")
-        for action in self.actions:
-            if action.enabled:
-                if not action.execute():
-                    print(f"[Macro] Ошибка выполнения действия {action.name}")
-                    return False
-        print(f"[Macro] Макрос '{self.name}' завершен")
-        return True
+    file_path: Path = field(default_factory=Path)
+    is_running: bool = False
+    thread: Optional[threading.Thread] = None
     
     def to_dict(self) -> Dict[str, Any]:
-        """Сериализует макрос в словарь."""
         return {
             "id": self.id,
             "name": self.name,
             "description": self.description,
-            "actions": [a.to_dict() for a in self.actions],
-            "created_at": self.created_at,
-            "updated_at": self.updated_at
+            "is_running": self.is_running
         }
-    
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Macro":
-        """Десериализует макрос из словаря."""
-        macro = cls(
-            id=data["id"],
-            name=data["name"],
-            description=data.get("description", ""),
-            created_at=data.get("created_at", time.time()),
-            updated_at=data.get("updated_at", time.time())
-        )
-        
-        for action_data in data.get("actions", []):
-            action_type = ActionType(action_data["action_type"])
-            
-            if action_type == ActionType.CLICK:
-                action = ClickAction(
-                    id=action_data["id"],
-                    name=action_data["name"],
-                    enabled=action_data.get("enabled", True),
-                    x=action_data.get("parameters", {}).get("x", 0),
-                    y=action_data.get("parameters", {}).get("y", 0)
-                )
-            elif action_type == ActionType.DELAY:
-                action = DelayAction(
-                    id=action_data["id"],
-                    name=action_data["name"],
-                    enabled=action_data.get("enabled", True),
-                    duration=action_data.get("parameters", {}).get("duration", 1.0)
-                )
-            else:
-                # Неизвестный тип действия
-                continue
-            
-            macro.actions.append(action)
-        
-        return macro
 
 
 class MacroStorage:
-    """Хранилище макросов."""
+    """Хранилище макросов, загружаемых из Python-файлов."""
     
-    def __init__(self, storage_path: Optional[Path] = None):
-        if storage_path is None:
-            storage_path = Path(__file__).parent.parent.parent / "macros.json"
-        self.storage_path = storage_path
-        self.macros: Dict[str, Macro] = {}
-        self._load()
+    def __init__(self, macros_dir: Optional[Path] = None):
+        if macros_dir is None:
+            macros_dir = Path(__file__).parent.parent.parent / "macros"
+        self.macros_dir = macros_dir
+        self.macros_dir.mkdir(parents=True, exist_ok=True)
+        self.macros: Dict[str, MacroInfo] = {}
+        self._module_cache: Dict[str, Any] = {}
+        self._load_macros()
     
-    def _load(self):
-        """Загружает макросы из файла."""
-        if self.storage_path.exists():
+    def _load_macros(self):
+        """Загружает макросы из Python-файлов в директории macros/."""
+        self.macros.clear()
+        self._module_cache.clear()
+        
+        for file_path in self.macros_dir.glob("*.py"):
+            if file_path.name.startswith("_"):
+                continue
+            
+            macro_id = file_path.stem
             try:
-                with open(self.storage_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    for macro_data in data.get("macros", []):
-                        macro = Macro.from_dict(macro_data)
-                        self.macros[macro.id] = macro
-                print(f"[MacroStorage] Загружено {len(self.macros)} макросов")
+                # Загружаем модуль
+                spec = importlib.util.spec_from_file_location(macro_id, file_path)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[macro_id] = module
+                    spec.loader.exec_module(module)
+                    
+                    # Получаем метаданные из модуля
+                    name = getattr(module, "NAME", macro_id)
+                    description = getattr(module, "DESCRIPTION", "")
+                    
+                    macro_info = MacroInfo(
+                        id=macro_id,
+                        name=name,
+                        description=description,
+                        file_path=file_path
+                    )
+                    self.macros[macro_id] = macro_info
+                    self._module_cache[macro_id] = module
+                    
             except Exception as e:
-                print(f"[MacroStorage] Ошибка загрузки: {e}")
+                print(f"[MacroStorage] Ошибка загрузки макроса {file_path.name}: {e}")
+        
+        print(f"[MacroStorage] Загружено {len(self.macros)} макросов")
     
-    def _save(self):
-        """Сохраняет макросы в файл."""
-        try:
-            data = {
-                "macros": [m.to_dict() for m in self.macros.values()]
-            }
-            with open(self.storage_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            print(f"[MacroStorage] Сохранено {len(self.macros)} макросов")
-        except Exception as e:
-            print(f"[MacroStorage] Ошибка сохранения: {e}")
+    def reload_macros(self):
+        """Перезагружает список макросов."""
+        self._load_macros()
     
-    def create_macro(self, name: str, description: str = "") -> Macro:
-        """Создает новый макрос."""
-        import uuid
-        macro = Macro(
-            id=str(uuid.uuid4()),
-            name=name,
-            description=description
-        )
-        self.macros[macro.id] = macro
-        self._save()
-        return macro
-    
-    def get_macro(self, macro_id: str) -> Optional[Macro]:
-        """Получает макрос по ID."""
+    def get_macro(self, macro_id: str) -> Optional[MacroInfo]:
+        """Получает информацию о макросе по ID."""
         return self.macros.get(macro_id)
     
-    def update_macro(self, macro: Macro) -> bool:
-        """Обновляет существующий макрос."""
-        if macro.id in self.macros:
-            macro.updated_at = time.time()
-            self.macros[macro.id] = macro
-            self._save()
-            return True
-        return False
-    
-    def delete_macro(self, macro_id: str) -> bool:
-        """Удаляет макрос по ID."""
-        if macro_id in self.macros:
-            del self.macros[macro_id]
-            self._save()
-            return True
-        return False
-    
-    def list_macros(self) -> List[Macro]:
+    def list_macros(self) -> List[MacroInfo]:
         """Возвращает список всех макросов."""
         return list(self.macros.values())
     
     def execute_macro(self, macro_id: str) -> bool:
-        """Выполняет макрос по ID."""
-        macro = self.get_macro(macro_id)
-        if macro:
-            return macro.execute()
-        return False
-
-
-# Фабрика действий
-def create_action(action_type: ActionType, name: str, **kwargs) -> MacroAction:
-    """Фабричный метод для создания действий."""
-    import uuid
+        """Выполняет макрос в отдельном потоке."""
+        macro_info = self.get_macro(macro_id)
+        if not macro_info:
+            return False
+        
+        if macro_info.is_running:
+            print(f"[MacroStorage] Макрос '{macro_info.name}' уже выполняется")
+            return False
+        
+        module = self._module_cache.get(macro_id)
+        if not module:
+            print(f"[MacroStorage] Модуль для макроса '{macro_id}' не найден")
+            return False
+        
+        # Проверяем наличие функции run
+        if not hasattr(module, "run") or not callable(module.run):
+            print(f"[MacroStorage] В макросе '{macro_id}' нет функции run()")
+            return False
+        
+        def run_macro():
+            macro_info.is_running = True
+            try:
+                print(f"[MacroStorage] Запуск макроса '{macro_info.name}'")
+                module.run()
+                print(f"[MacroStorage] Макрос '{macro_info.name}' завершен")
+            except Exception as e:
+                print(f"[MacroStorage] Ошибка выполнения макроса '{macro_info.name}': {e}")
+            finally:
+                macro_info.is_running = False
+        
+        macro_info.thread = threading.Thread(target=run_macro, daemon=True)
+        macro_info.thread.start()
+        return True
     
-    if action_type == ActionType.CLICK:
-        return ClickAction(
-            id=str(uuid.uuid4()),
-            name=name,
-            x=kwargs.get("x", 0),
-            y=kwargs.get("y", 0)
-        )
-    elif action_type == ActionType.DELAY:
-        return DelayAction(
-            id=str(uuid.uuid4()),
-            name=name,
-            duration=kwargs.get("duration", 1.0)
-        )
-    else:
-        raise ValueError(f"Неизвестный тип действия: {action_type}")
+    def stop_macro(self, macro_id: str) -> bool:
+        """Останавливает выполнение макроса (помечает как остановленный)."""
+        macro_info = self.get_macro(macro_id)
+        if not macro_info or not macro_info.is_running:
+            return False
+        
+        # Фактическая остановка зависит от реализации макроса
+        # Здесь мы просто помечаем что он больше не выполняется
+        macro_info.is_running = False
+        print(f"[MacroStorage] Макрос '{macro_info.name}' остановлен")
+        return True
+    
+    def is_macro_running(self, macro_id: str) -> bool:
+        """Проверяет, выполняется ли макрос."""
+        macro_info = self.get_macro(macro_id)
+        return macro_info.is_running if macro_info else False
+
+
+# Вспомогательные функции для использования в макросах
+def click(x: int, y: int):
+    """Выполняет клик в указанную точку."""
+    try:
+        from PyQt6.QtGui import QCursor
+        from PyQt6.QtCore import QPoint
+        
+        cursor = QCursor()
+        cursor.setPos(QPoint(x, y))
+        # Симуляция клика будет добавлена позже
+        print(f"[Action] Клик в точке ({x}, {y})")
+    except ImportError:
+        print(f"[Action] Клик в точке ({x}, {y}) (симуляция)")
+
+
+def delay(seconds: float):
+    """Выполняет задержку на указанное количество секунд."""
+    print(f"[Action] Задержка на {seconds} сек.")
+    time.sleep(seconds)
+
+
+def wait_for(condition: Callable[[], bool], timeout: float = 10.0, interval: float = 0.1) -> bool:
+    """Ждет выполнения условия до истечения таймаута."""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        if condition():
+            return True
+        time.sleep(interval)
+    return False

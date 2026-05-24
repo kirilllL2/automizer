@@ -1,79 +1,17 @@
 """
 UI модуль для управления макросами.
-Содержит виджеты для просмотра, запуска макросов и отдельное окно для редактирования.
+Показывает список макросов и позволяет их запускать/останавливать.
 """
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QFrame, QScrollArea, QGridLayout,
-    QSpacerItem, QSizePolicy, QMessageBox, QDialog, QDialogButtonBox,
-    QFormLayout, QSpinBox, QComboBox, QLineEdit, QDoubleSpinBox,
-    QListWidget, QListWidgetItem, QToolBar, QMenu, QAbstractItemView,
-    QMainWindow, QSplitter
+    QTableWidgetItem, QHeaderView, QFrame, QMessageBox
 )
-from PyQt6.QtCore import Qt, pyqtSignal, QSize, QTimer
-from PyQt6.QtGui import QFont, QIcon, QAction, QCursor
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QCursor
 
-from src.macro import (
-    MacroStorage, Macro, MacroAction, ActionType, create_action
-)
-from src.ui.main_window import ModernStyle, apply_modern_style
-
-
-class ActionListWidget(QListWidget):
-    """Список действий макроса с поддержкой Drag&Drop."""
-    
-    action_selected = pyqtSignal(MacroAction)
-    action_double_clicked_signal = pyqtSignal(MacroAction)
-    action_moved = pyqtSignal(int, int)  # from_index, to_index
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self.itemClicked.connect(self._on_item_clicked)
-        self.itemDoubleClicked.connect(self._on_item_double_clicked)
-        self._actions: list[MacroAction] = []
-    
-    def set_actions(self, actions: list[MacroAction]):
-        """Устанавливает список действий."""
-        self.clear()
-        self._actions = actions
-        for action in actions:
-            icon = "🖱️" if action.action_type == ActionType.CLICK else "⏱️"
-            status = "✓" if action.enabled else "✗"
-            item = QListWidgetItem(f"{icon} {status} {action.name}")
-            item.setData(Qt.ItemDataRole.UserRole, action)
-            self.addItem(item)
-    
-    def get_actions(self) -> list[MacroAction]:
-        """Возвращает список действий."""
-        return self._actions
-    
-    def _on_item_clicked(self, item: QListWidgetItem):
-        """Обработка клика по элементу."""
-        action = item.data(Qt.ItemDataRole.UserRole)
-        if action:
-            self.action_selected.emit(action)
-    
-    def _on_item_double_clicked(self, item: QListWidgetItem):
-        """Обработка двойного клика по элементу."""
-        action = item.data(Qt.ItemDataRole.UserRole)
-        if action:
-            self.action_double_clicked_signal.emit(action)
-    
-    def dropEvent(self, event):
-        """Обработка перетаскивания."""
-        old_index = self.currentRow()
-        super().dropEvent(event)
-        new_index = self.currentRow()
-        
-        if old_index != -1 and new_index != -1 and old_index != new_index:
-            # Перемещаем действие в списке
-            action = self._actions.pop(old_index)
-            self._actions.insert(new_index, action)
-            self.action_moved.emit(old_index, new_index)
+from src.macro import MacroStorage
+from src.ui.main_window import ModernStyle
 
 
 class MacrosWidget(QWidget):
@@ -83,6 +21,11 @@ class MacrosWidget(QWidget):
         super().__init__(parent)
         self.storage = storage
         self._setup_ui()
+        
+        # Таймер для обновления статуса выполнения
+        self.status_timer = QTimer()
+        self.status_timer.timeout.connect(self._update_status)
+        self.status_timer.start(500)  # Обновляем каждые 500мс
     
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -102,18 +45,14 @@ class MacrosWidget(QWidget):
         self.refresh_btn.clicked.connect(self._load_macros)
         top_layout.addWidget(self.refresh_btn)
         
-        self.new_macro_btn = QPushButton("➕ Новый макрос")
-        self.new_macro_btn.clicked.connect(self._create_new_macro)
-        top_layout.addWidget(self.new_macro_btn)
-        
         top_layout.addStretch()
         layout.addLayout(top_layout)
         
         # Таблица макросов
         self.macros_table = QTableWidget()
-        self.macros_table.setColumnCount(4)
+        self.macros_table.setColumnCount(3)
         self.macros_table.setHorizontalHeaderLabels([
-            "Название", "Описание", "Действий", "Дата обновления"
+            "Название", "Описание", "Статус"
         ])
         self.macros_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.ResizeMode.Stretch
@@ -127,7 +66,7 @@ class MacrosWidget(QWidget):
         self.macros_table.setSelectionMode(
             QTableWidget.SelectionMode.SingleSelection
         )
-        self.macros_table.itemDoubleClicked.connect(self._on_macro_double_clicked)
+        self.macros_table.itemSelectionChanged.connect(self._on_macro_selected)
         layout.addWidget(self.macros_table)
         
         # Панель действий
@@ -141,16 +80,11 @@ class MacrosWidget(QWidget):
         self.run_btn.setEnabled(False)
         actions_layout.addWidget(self.run_btn)
         
-        self.edit_btn = QPushButton("✏️ Редактировать")
-        self.edit_btn.clicked.connect(self._edit_macro)
-        self.edit_btn.setEnabled(False)
-        actions_layout.addWidget(self.edit_btn)
-        
-        self.delete_btn = QPushButton("🗑️ Удалить")
-        self.delete_btn.setObjectName("dangerBtn")
-        self.delete_btn.clicked.connect(self._delete_macro)
-        self.delete_btn.setEnabled(False)
-        actions_layout.addWidget(self.delete_btn)
+        self.stop_btn = QPushButton("⏹️ Остановить")
+        self.stop_btn.setObjectName("dangerBtn")
+        self.stop_btn.clicked.connect(self._stop_macro)
+        self.stop_btn.setEnabled(False)
+        actions_layout.addWidget(self.stop_btn)
         
         actions_layout.addStretch()
         layout.addWidget(actions_card)
@@ -160,6 +94,7 @@ class MacrosWidget(QWidget):
     
     def _load_macros(self):
         """Загружает список макросов."""
+        self.storage.reload_macros()
         self.macros_table.setRowCount(0)
         macros = self.storage.list_macros()
         
@@ -167,90 +102,89 @@ class MacrosWidget(QWidget):
             row = self.macros_table.rowCount()
             self.macros_table.insertRow(row)
             
-            self.macros_table.setItem(row, 0, QTableWidgetItem(macro.name))
-            self.macros_table.setItem(row, 1, QTableWidgetItem(macro.description))
-            self.macros_table.setItem(row, 2, QTableWidgetItem(str(len(macro.actions))))
+            name_item = QTableWidgetItem(macro.name)
+            name_item.setData(Qt.ItemDataRole.UserRole, macro.id)
+            self.macros_table.setItem(row, 0, name_item)
             
-            from datetime import datetime
-            updated = datetime.fromtimestamp(macro.updated_at).strftime("%Y-%m-%d %H:%M")
-            self.macros_table.setItem(row, 3, QTableWidgetItem(updated))
+            self.macros_table.setItem(row, 1, QTableWidgetItem(macro.description))
+            
+            status = "🟢 Выполняется" if macro.is_running else "⚪ Ожидание"
+            self.macros_table.setItem(row, 2, QTableWidgetItem(status))
         
         self.macros_table.itemSelectionChanged.connect(self._on_macro_selected)
+    
+    def _update_status(self):
+        """Обновляет статус выполнения макросов."""
+        for row in range(self.macros_table.rowCount()):
+            item = self.macros_table.item(row, 0)
+            if item:
+                macro_id = item.data(Qt.ItemDataRole.UserRole)
+                macro_info = self.storage.get_macro(macro_id)
+                if macro_info:
+                    status = "🟢 Выполняется" if macro_info.is_running else "⚪ Ожидание"
+                    self.macros_table.setItem(row, 2, QTableWidgetItem(status))
     
     def _on_macro_selected(self):
         """Выбран макрос в таблице."""
         selected = len(self.macros_table.selectedItems()) > 0
-        self.edit_btn.setEnabled(selected)
         self.run_btn.setEnabled(selected)
-        self.delete_btn.setEnabled(selected)
+        
+        # Кнопка остановки активна только если макрос выполняется
+        selected_rows = self.macros_table.selectedItems()
+        if selected_rows:
+            row = selected_rows[0].row()
+            item = self.macros_table.item(row, 0)
+            if item:
+                macro_id = item.data(Qt.ItemDataRole.UserRole)
+                macro_info = self.storage.get_macro(macro_id)
+                self.stop_btn.setEnabled(macro_info and macro_info.is_running)
+        else:
+            self.stop_btn.setEnabled(False)
     
-    def _on_macro_double_clicked(self, row: int, column: int):
-        """Двойной клик по макросу - открываем редактор."""
-        self._edit_macro()
-    
-    def _get_selected_macro(self) -> Macro | None:
-        """Получает выбранный макрос."""
+    def _get_selected_macro_id(self) -> str | None:
+        """Получает ID выбранного макроса."""
         selected_rows = self.macros_table.selectedItems()
         if not selected_rows:
             return None
         
         row = selected_rows[0].row()
-        macro_id = self.macros_table.item(row, 0).data(Qt.ItemDataRole.UserRole)
-        
-        # Ищем макрос по названию (упрощенно)
-        macro_name = self.macros_table.item(row, 0).text()
-        for macro in self.storage.list_macros():
-            if macro.name == macro_name:
-                return macro
-        
+        item = self.macros_table.item(row, 0)
+        if item:
+            return item.data(Qt.ItemDataRole.UserRole)
         return None
-    
-    def _create_new_macro(self):
-        """Создает новый макрос."""
-        from src.ui.macro_editor_window import MacroEditorWindow
-        macro = self.storage.create_macro("Новый макрос", "")
-        dialog = MacroEditorWindow(macro, self.storage, self)
-        dialog.macro_saved.connect(self._load_macros)
-        dialog.exec()
-    
-    def _edit_macro(self):
-        """Редактирует выбранный макрос."""
-        macro = self._get_selected_macro()
-        if macro:
-            from src.ui.macro_editor_window import MacroEditorWindow
-            dialog = MacroEditorWindow(macro, self.storage, self)
-            dialog.macro_saved.connect(self._load_macros)
-            dialog.exec()
     
     def _run_macro(self):
         """Запускает выбранный макрос."""
-        macro = self._get_selected_macro()
-        if macro:
-            reply = QMessageBox.question(
-                self, "Запуск макроса",
-                f"Запустить макрос '{macro.name}'?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                # Запуск в отдельном потоке будет добавлен позже
-                success = self.storage.execute_macro(macro.id)
-                if success:
-                    QMessageBox.information(self, "Готово", "Макрос успешно выполнен")
-                else:
-                    QMessageBox.warning(self, "Ошибка", "При выполнении макроса произошла ошибка")
+        macro_id = self._get_selected_macro_id()
+        if macro_id:
+            macro_info = self.storage.get_macro(macro_id)
+            if macro_info:
+                reply = QMessageBox.question(
+                    self, "Запуск макроса",
+                    f"Запустить макрос '{macro_info.name}'?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    success = self.storage.execute_macro(macro_id)
+                    if success:
+                        self._update_status()
+                    else:
+                        QMessageBox.warning(self, "Ошибка", "Не удалось запустить макрос")
     
-    def _delete_macro(self):
-        """Удаляет выбранный макрос."""
-        macro = self._get_selected_macro()
-        if macro:
-            reply = QMessageBox.question(
-                self, "Удаление макроса",
-                f"Вы уверены, что хотите удалить макрос '{macro.name}'?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            
-            if reply == QMessageBox.StandardButton.Yes:
-                self.storage.delete_macro(macro.id)
-                self._load_macros()
+    def _stop_macro(self):
+        """Останавливает выбранный макрос."""
+        macro_id = self._get_selected_macro_id()
+        if macro_id:
+            macro_info = self.storage.get_macro(macro_id)
+            if macro_info and macro_info.is_running:
+                reply = QMessageBox.question(
+                    self, "Остановка макроса",
+                    f"Остановить макрос '{macro_info.name}'?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.storage.stop_macro(macro_id)
+                    self._update_status()
 
