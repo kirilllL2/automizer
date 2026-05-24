@@ -1,33 +1,52 @@
 ```
-# Compiled Python files
-*.pyc
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Dependencies
-.venv/
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
 venv/
-node_modules/
+.venv/
+env/
 
-# Logs and temp files
+# Logs
 *.log
-*.tmp
-*.swp
 
-# Environment
-.env
-.env.local
-*.env.*
-
-# Editors
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# Coverage reports
+# Coverage
 .coverage
 coverage/
 htmlcov/
 
-# Python cache
+# Environment variables
+.env
+.env.local
+*.env.*
+
+# MyPy
 .mypy_cache/
+
+# PyTest
 .pytest_cache/
+
+# Distribution / packaging
+*.tar.gz
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# System
+.DS_Store
+Thumbs.db
 ```

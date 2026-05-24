@@ -9,11 +9,17 @@
 5. Проверить, что вкладка "рейды" активна (по пресету aliance_news_raids-selected)
 6. Если не активна - кликнуть на неактивную кнопку рейда (aliance_news_raids-unselected)
 7. Вывести сообщение "Рейды открыты"
+8. Запустить цикл поиска рейдов (каждые 15 секунд):
+   - Искать кнопку присоединения (aliance_news_raids-can_join_raid)
+   - Если найдена - кликнуть, затем найти кнопку отправки (join_raid-send) и кликнуть
+   - Затем нажать на кнопку "Выбранных рейдов" (aliance_news_raids-selected)
+   - Если какую-то кнопку не удалось найти - кликнуть на вкладку рейдов
+   - Если не нашлось изображение со вкладкой рейдов - нажать join_raid-speed_cancel и снова искать вкладку
 """
 
 # Метаданные макроса
 NAME = "Авто-присоединение к рейдам"
-DESCRIPTION = "Автоматически открывает вкладку рейдов в альянсе"
+DESCRIPTION = "Автоматически открывает вкладку рейдов и присоединяется к доступным рейдам"
 
 # Импортируем действия из модуля macro
 from src.macro import (
@@ -24,12 +30,158 @@ from src.macro import (
     find_window_by_process,
     click_in_window_region,
 )
+import random
+import time
+import threading
+
+# Флаг для контроля остановки скрипта
+stop_requested = False
+
+
+def check_stop_requested():
+    """Проверяет, запрошена ли остановка скрипта"""
+    return stop_requested
+
+
+def request_stop():
+    """Запрашивает остановку скрипта"""
+    global stop_requested
+    stop_requested = True
+
+
+def reset_stop_flag():
+    """Сбрасывает флаг остановки"""
+    global stop_requested
+    stop_requested = False
+
+
+def click_on_raids_tab(window_id: int) -> bool:
+    """
+    Кликает на вкладку рейдов (кнопку aliance_news_raids-unselected или aliance_news_raids-selected).
+    
+    Args:
+        window_id: Handle окна.
+    
+    Returns:
+        True, если успешно кликнул, False иначе.
+    """
+    print("[Инфо] Клик по вкладке рейдов...")
+    
+    # Сначала пробуем найти неактивную кнопку рейдов
+    raids_region = find_region("aliance_news_raids-unselected")
+    
+    if not raids_region:
+        # Если не найдена, пробуем найти активную кнопку
+        raids_region = find_region("aliance_news_raids-selected")
+    
+    if raids_region:
+        click_in_window_region(window_id, raids_region)
+        delay(0.5)
+        print("[Инфо] Успешный клик по вкладке рейдов")
+        return True
+    else:
+        print("[Предупреждение] Не удалось найти кнопку вкладки рейдов")
+        return False
+
+
+def handle_speed_cancel(window_id: int):
+    """
+    Обрабатывает ситуацию, когда не нашлось изображение со вкладкой рейдов.
+    Нажимает на join_raid-speed_cancel и затем снова ищет вкладку с рейдами.
+    
+    Args:
+        window_id: Handle окна.
+    
+    Returns:
+        True, если успешно обработал, False иначе.
+    """
+    print("[Инфо] Вкладка рейдов не найдена, пытаемся нажать speed_cancel...")
+    
+    # Ищем кнопку speed_cancel
+    speed_cancel_region = find_region("join_raid-speed_cancel")
+    
+    if not speed_cancel_region:
+        print("[Предупреждение] Кнопка speed_cancel не найдена")
+        return False
+    
+    print(f"[Инфо] Найдена кнопка speed_cancel: {speed_cancel_region}")
+    
+    # Кликаем на speed_cancel
+    click_in_window_region(window_id, speed_cancel_region)
+    delay(1.0)
+    
+    # После нажатия speed_cancel снова пытаемся кликнуть на вкладку рейдов
+    print("[Инфо] Повторная попытка клика по вкладке рейдов после speed_cancel...")
+    return click_on_raids_tab(window_id)
+
+
+def try_join_raid(window_id: int) -> bool:
+    """
+    Пытается присоединиться к рейду.
+    
+    Args:
+        window_id: Handle окна.
+    
+    Returns:
+        True, если успешно присоединился, False иначе.
+    """
+    print("[Цикл] Поиск доступного рейда для присоединения...")
+    
+    # Шаг 1: Ищем кнопку присоединения к рейду
+    can_join_region = find_region("aliance_news_raids-can_join_raid")
+    
+    if not can_join_region:
+        print("[Цикл] Кнопка присоединения не найдена, клик по вкладке рейдов")
+        click_on_raids_tab(window_id)
+        return False
+    
+    print(f"[Цикл] Найдена кнопка присоединения: {can_join_region}")
+    
+    # Кликаем на кнопку присоединения
+    click_in_window_region(window_id, can_join_region)
+    delay(1.0)
+    
+    # Шаг 2: Ищем кнопку отправки
+    print("[Цикл] Поиск кнопки отправки...")
+    send_region = find_region("join_raid-send")
+    
+    if not send_region:
+        print("[Цикл] Кнопка отправки не найдена")
+        # Проверяем, есть ли кнопка speed_cancel и нажимаем её
+        handle_speed_cancel(window_id)
+        return False
+    
+    print(f"[Цикл] Найдена кнопка отправки: {send_region}")
+    
+    # Кликаем на кнопку отправки
+    click_in_window_region(window_id, send_region)
+    delay(1.0)
+    
+    # Шаг 3: Ищем кнопку "Выбранных рейдов" (aliance_news_raids-selected)
+    print("[Цикл] Поиск кнопки 'Выбранных рейдов'...")
+    all_sended_region = find_region("aliance_news_raids-selected")
+    
+    if not all_sended_region:
+        print("[Цикл] Кнопка 'Выбранных рейдов' не найдена")
+        # Проверяем, есть ли кнопка speed_cancel и нажимаем её
+        handle_speed_cancel(window_id)
+        return False
+    
+    print(f"[Цикл] Найдена кнопка 'Выбранных рейдов': {all_sended_region}")
+    
+    # Кликаем на кнопку "Выбранных рейдов"
+    click_in_window_region(window_id, all_sended_region)
+    delay(0.5)
+    
+    print("[Цикл] Успешно присоединился к рейду!")
+    return True
 
 
 def run():
     """
     Основная функция макроса.
-    Выполняет последовательность действий для открытия вкладки рейдов.
+    Выполняет последовательность действий для открытия вкладки рейдов
+    и циклического поиска доступных рейдов.
     """
     print("Начало выполнения макроса 'Авто-присоединение к рейдам'")
     
@@ -107,8 +259,38 @@ def run():
         # Задержка для переключения
         delay(0.5)
     
-    # Финальное сообщение
+    # Финальное сообщение об успешном открытии рейдов
     print("=" * 50)
     print("Рейды открыты")
     print("=" * 50)
-    print("Макрос завершен успешно")
+    
+    # Запуск цикла поиска рейдов
+    print("=" * 50)
+    print("Запуск цикла поиска рейдов (каждые 15 секунд)")
+    print("=" * 50)
+    
+    iteration = 0
+    while not check_stop_requested():
+        iteration += 1
+        print(f"\n[Цикл] === Итерация {iteration} ===")
+        
+        # Пытаемся присоединиться к рейду
+        success = try_join_raid(window_id)
+        
+        if success:
+            print("[Цикл] Рейд найден и присоединение выполнено!")
+        else:
+            print("[Цикл] Присоединение не выполнено, продолжаем поиск...")
+        
+        # Ждем 15 секунд перед следующей проверкой
+        print(f"[Цикл] Ожидание 15 секунд до следующей проверки...")
+        for i in range(15, 0, -1):
+            if check_stop_requested():
+                break
+            print(f"[Цикл] Осталось секунд: {i}", end="\r")
+            time.sleep(1)
+        
+        if not check_stop_requested():
+            print()  # Новая строка после обратного отсчета
+    
+    print("\n[Инфо] Макрос завершен.")

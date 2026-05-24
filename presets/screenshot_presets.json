@@ -167,5 +167,18 @@
     "description": "",
     "use_relative_coords": false,
     "window_id": null
+  },
+  "join_raid-raid_is_full": {
+    "id": "join_raid-raid_is_full",
+    "name": "join_raid-raid_is_full",
+    "screenshot_path": "presets/screenshots/join_raid-raid_is_full.png",
+    "process_preset_id": "tilesauto",
+    "x": 420,
+    "y": 660,
+    "width": 100,
+    "height": 30,
+    "description": "",
+    "use_relative_coords": false,
+    "window_id": null
   }
 }

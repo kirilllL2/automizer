@@ -148,6 +148,15 @@ class MacroStorage:
         if not macro_info or not macro_info.is_running:
             return False
         
+        # Пытаемся вызвать функцию request_stop в модуле макроса, если она существует
+        module = self._module_cache.get(macro_id)
+        if module and hasattr(module, "request_stop"):
+            try:
+                module.request_stop()
+                print(f"[MacroStorage] Запрошена остановка макроса '{macro_info.name}'")
+            except Exception as e:
+                print(f"[MacroStorage] Ошибка при запросе остановки макроса: {e}")
+        
         # Фактическая остановка зависит от реализации макроса
         # Здесь мы просто помечаем что он больше не выполняется
         macro_info.is_running = False
