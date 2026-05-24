@@ -24,6 +24,7 @@ from src.storage import PresetStorage
 from src.screenshot import ScreenshotManager
 from src.screenshot.presets import ScreenshotPresetStorage, ScreenshotPreset
 from src.cv import CVMatcher, MatchResult
+from src.macro import MacroStorage
 
 
 class ModernStyle:
@@ -46,6 +47,9 @@ class ModernStyle:
     BORDER_RADIUS = 12
     PADDING = 16
     SPACING = 12
+    PADDING_SMALL = 8
+    SPACING_SMALL = 6
+    SPACING_TINY = 4
 
 
 def apply_modern_style(widget):
@@ -1933,6 +1937,7 @@ class MainWindow(QMainWindow):
         self.preset_storage = PresetStorage()
         self.screenshot_manager = ScreenshotManager()
         self.screenshot_preset_storage = ScreenshotPresetStorage()
+        self.macro_storage = MacroStorage()
         
         self._setup_ui()
         self._apply_styling()
@@ -1984,6 +1989,10 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(self.btn_cv_recognition)
         self.nav_buttons.append(self.btn_cv_recognition)
         
+        self.btn_macros = SidebarButton("🎬", "Макросы")
+        sidebar_layout.addWidget(self.btn_macros)
+        self.nav_buttons.append(self.btn_macros)
+        
         sidebar_layout.addStretch()
         
         # Добавляем боковую панель в основной макет
@@ -2016,12 +2025,18 @@ class MainWindow(QMainWindow):
         )
         self.content_stack.addWidget(self.cv_recognition)
         
+        # Вкладка 4: Макросы
+        from src.ui.macro_widget import MacrosWidget
+        self.macros_widget = MacrosWidget(self.macro_storage)
+        self.content_stack.addWidget(self.macros_widget)
+        
         main_layout.addWidget(self.content_stack)
         
         # Подключаем кнопки навигации
         self.btn_window_selection.clicked.connect(lambda: self._switch_tab(0))
         self.btn_screenshot_presets.clicked.connect(lambda: self._switch_tab(1))
         self.btn_cv_recognition.clicked.connect(lambda: self._switch_tab(2))
+        self.btn_macros.clicked.connect(lambda: self._switch_tab(3))
     
     def _switch_tab(self, index: int):
         """Переключает вкладку и обновляет состояние кнопок."""
