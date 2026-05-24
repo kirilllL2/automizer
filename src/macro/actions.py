@@ -82,7 +82,7 @@ def click(x: int, y: int):
     """
     try:
         from PyQt6.QtGui import QCursor
-        from PyQt6.QtCore import QPoint
+        from PyQt6.QtCore import QPoint, QPointF
         from PyQt6.QtWidgets import QApplication
         
         # Получаем или создаем приложение
@@ -102,7 +102,7 @@ def click(x: int, y: int):
             app.focusWidget() if app.focusWidget() else app.activeWindow(),
             QMouseEvent(
                 QMouseEvent.Type.MouseButtonPress,
-                cursor.pos(),
+                QPointF(x, y),
                 Qt.MouseButton.LeftButton,
                 Qt.MouseButton.LeftButton,
                 Qt.KeyboardModifier.NoModifier
@@ -112,7 +112,7 @@ def click(x: int, y: int):
             app.focusWidget() if app.focusWidget() else app.activeWindow(),
             QMouseEvent(
                 QMouseEvent.Type.MouseButtonRelease,
-                cursor.pos(),
+                QPointF(x, y),
                 Qt.MouseButton.LeftButton,
                 Qt.MouseButton.LeftButton,
                 Qt.KeyboardModifier.NoModifier
