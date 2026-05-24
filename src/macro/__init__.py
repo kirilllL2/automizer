@@ -50,7 +50,7 @@ class MacroStorage:
     
     def __init__(self, macros_dir: Optional[Path] = None):
         if macros_dir is None:
-            macros_dir = Path(__file__).parent.parent.parent / "macros"
+            macros_dir = Path(__file__).parent / "macros"
         self.macros_dir = macros_dir
         self.macros_dir.mkdir(parents=True, exist_ok=True)
         self.macros: Dict[str, MacroInfo] = {}

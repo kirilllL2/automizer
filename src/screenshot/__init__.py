@@ -22,6 +22,15 @@ from typing import Optional
 
 from src.config import get_config
 
+from .presets import ScreenshotPreset, ScreenshotPresetStorage
+
+__all__ = [
+    "ScreenshotInfo",
+    "ScreenshotManager",
+    "ScreenshotPreset",
+    "ScreenshotPresetStorage",
+]
+
 
 @dataclass
 class ScreenshotInfo:
