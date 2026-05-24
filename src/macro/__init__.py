@@ -12,6 +12,19 @@ import time
 import threading
 
 
+# Импортируем действия из модуля actions для удобного использования в макросах
+from src.macro.actions import (
+    Region,
+    click,
+    click_in_region,
+    find_region,
+    find_all_regions,
+    wait_for_region,
+    get_screen_size,
+    create_region_from_center,
+)
+
+
 @dataclass
 class MacroInfo:
     """Информация о макросе."""
@@ -145,19 +158,8 @@ class MacroStorage:
 
 
 # Вспомогательные функции для использования в макросах
-def click(x: int, y: int):
-    """Выполняет клик в указанную точку."""
-    try:
-        from PyQt6.QtGui import QCursor
-        from PyQt6.QtCore import QPoint
-        
-        cursor = QCursor()
-        cursor.setPos(QPoint(x, y))
-        # Симуляция клика будет добавлена позже
-        print(f"[Action] Клик в точке ({x}, {y})")
-    except ImportError:
-        print(f"[Action] Клик в точке ({x}, {y}) (симуляция)")
-
+# Эти функции теперь импортируются из src.macro.actions для удобства
+# Для обратной совместимости оставляем алиасы
 
 def delay(seconds: float):
     """Выполняет задержку на указанное количество секунд."""
