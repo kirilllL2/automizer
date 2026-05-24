@@ -210,7 +210,7 @@ def find_region(
     if not preset_info:
         raise FileNotFoundError(f"Пресет с ID '{preset_id}' не найден")
     
-    preset_path = preset_info.file_path
+    preset_path = preset_info.screenshot_path
     
     # Получаем уверенность из конфига если не указана
     if confidence is None:
@@ -346,7 +346,7 @@ def find_all_regions(
     if not preset_info:
         raise FileNotFoundError(f"Пресет с ID '{preset_id}' не найден")
     
-    preset_path = preset_info.file_path
+    preset_path = preset_info.screenshot_path
     
     # Получаем уверенность из конфига если не указана
     if confidence is None:
