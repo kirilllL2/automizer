@@ -7,10 +7,10 @@ from PyQt6.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QFrame, QGridLayout, QFormLayout, QSpinBox, QComboBox, QLineEdit, 
     QDoubleSpinBox, QListWidget, QListWidgetItem, QAbstractItemView,
-    QMessageBox, QSplitter
+    QMessageBox, QSplitter, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QCursor
+from PyQt6.QtGui import QCursor, QAction
 
 from src.macro import (
     Macro, MacroAction, ClickAction, DelayAction,
@@ -20,11 +20,13 @@ from src.ui.main_window import ModernStyle, apply_modern_style
 
 
 class ActionListWidget(QListWidget):
-    """Список действий макроса с поддержкой Drag&Drop."""
+    """Список действий макроса с поддержкой Drag&Drop и контекстным меню."""
     
     action_selected = pyqtSignal(MacroAction)
     action_double_clicked_signal = pyqtSignal(MacroAction)
     action_moved = pyqtSignal(int, int)
+    action_added = pyqtSignal(ActionType)
+    action_delete_requested = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -33,7 +35,32 @@ class ActionListWidget(QListWidget):
         self.setDefaultDropAction(Qt.DropAction.MoveAction)
         self.itemClicked.connect(self._on_item_clicked)
         self.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._show_context_menu)
         self._actions: list[MacroAction] = []
+        self._setup_context_menu()
+    
+    def _setup_context_menu(self):
+        """Настраивает контекстное меню."""
+        self.context_menu = QMenu(self)
+        
+        add_click_action = QAction("🖱️ Добавить клик", self)
+        add_click_action.triggered.connect(lambda: self.action_added.emit(ActionType.CLICK))
+        self.context_menu.addAction(add_click_action)
+        
+        add_delay_action = QAction("⏱️ Добавить задержку", self)
+        add_delay_action.triggered.connect(lambda: self.action_added.emit(ActionType.DELAY))
+        self.context_menu.addAction(add_delay_action)
+        
+        self.context_menu.addSeparator()
+        
+        delete_action = QAction("🗑️ Удалить выбранное", self)
+        delete_action.triggered.connect(lambda: self.action_delete_requested.emit())
+        self.context_menu.addAction(delete_action)
+    
+    def _show_context_menu(self, pos):
+        """Показывает контекстное меню."""
+        self.context_menu.exec(self.mapToGlobal(pos))
     
     def set_actions(self, actions: list[MacroAction]):
         """Устанавливает список действий."""
@@ -265,39 +292,46 @@ class MacroEditorWindow(QDialog):
         self.action_list.action_selected.connect(self._on_action_selected)
         self.action_list.action_double_clicked_signal.connect(self._edit_action_dialog)
         self.action_list.action_moved.connect(self._on_action_moved)
+        self.action_list.action_added.connect(self._add_action_by_type)
+        self.action_list.action_delete_requested.connect(self._delete_action)
         left_layout.addWidget(self.action_list)
         
-        # Кнопки управления действиями
+        # Кнопки управления действиями (компактные)
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(8)
+        btn_layout.setSpacing(6)
         
-        self.add_click_btn = QPushButton("🖱️ Добавить клик")
-        self.add_click_btn.clicked.connect(self._add_click_action)
-        btn_layout.addWidget(self.add_click_btn)
+        self.add_btn = QPushButton("+")
+        self.add_btn.setObjectName("secondaryBtn")
+        self.add_btn.setToolTip("Добавить действие (ПКМ для выбора)")
+        self.add_btn.setFixedWidth(30)
+        btn_layout.addWidget(self.add_btn)
         
-        self.add_delay_btn = QPushButton("⏱️ Добавить задержку")
-        self.add_delay_btn.clicked.connect(self._add_delay_action)
-        btn_layout.addWidget(self.add_delay_btn)
-        
-        btn_layout.addStretch()
-        
-        self.move_up_btn = QPushButton("⬆️")
+        self.move_up_btn = QPushButton("⬆")
         self.move_up_btn.setObjectName("secondaryBtn")
         self.move_up_btn.setToolTip("Переместить вверх")
+        self.move_up_btn.setFixedWidth(30)
         self.move_up_btn.clicked.connect(self._move_action_up)
         btn_layout.addWidget(self.move_up_btn)
         
-        self.move_down_btn = QPushButton("⬇️")
+        self.move_down_btn = QPushButton("⬇")
         self.move_down_btn.setObjectName("secondaryBtn")
         self.move_down_btn.setToolTip("Переместить вниз")
+        self.move_down_btn.setFixedWidth(30)
         self.move_down_btn.clicked.connect(self._move_action_down)
         btn_layout.addWidget(self.move_down_btn)
         
-        self.delete_action_btn = QPushButton("🗑️")
+        self.delete_action_btn = QPushButton("🗑")
         self.delete_action_btn.setObjectName("dangerBtn")
         self.delete_action_btn.setToolTip("Удалить действие")
+        self.delete_action_btn.setFixedWidth(30)
         self.delete_action_btn.clicked.connect(self._delete_action)
         btn_layout.addWidget(self.delete_action_btn)
+        
+        hint_label = QLabel("💡 ПКМ для добавления/удаления, двойной клик для редактирования")
+        hint_label.setStyleSheet(f"color: {ModernStyle.TEXT_SECONDARY}; font-size: 11px;")
+        btn_layout.addWidget(hint_label)
+        
+        btn_layout.addStretch()
         
         left_layout.addLayout(btn_layout)
         splitter.addWidget(left_widget)
@@ -388,15 +422,12 @@ class MacroEditorWindow(QDialog):
         )
         self.action_list.set_actions(self.macro.actions)
     
-    def _add_click_action(self):
-        """Добавляет действие клика."""
-        action = create_action(ActionType.CLICK, "Клик", x=100, y=100)
-        self.macro.add_action(action)
-        self.action_list.set_actions(self.macro.actions)
-    
-    def _add_delay_action(self):
-        """Добавляет действие задержки."""
-        action = create_action(ActionType.DELAY, "Задержка", duration=1.0)
+    def _add_action_by_type(self, action_type: ActionType):
+        """Добавляет действие указанного типа."""
+        if action_type == ActionType.CLICK:
+            action = create_action(ActionType.CLICK, "Клик", x=100, y=100)
+        else:
+            action = create_action(ActionType.DELAY, "Задержка", duration=1.0)
         self.macro.add_action(action)
         self.action_list.set_actions(self.macro.actions)
     
