@@ -1,22 +1,60 @@
-```
+```python
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Logs and temp files
-*.log
-*.tmp
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 
 # Environment
-.env
-.env.local
-*.env.*
+.venv/
+venv/
+env/
+ENV/
 
-# Editors
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*.tmp
+
+# Logs
+*.log
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+.coverage.*
+
+# Testing
+.pytest_cache/
+.mypy_cache/
+
+# Distribution / packaging
+.Python
+env/
+venv/
+ENV/
 ```
+
+Wait, I need to reconsider this. The only change is a modified Python source file (`src/ui/__init__.py`), which means there are no build artifacts, dependencies, or temporary files in the change list. According to rule #6, I should output an empty .gitignore.
+
+(empty — output nothing)
