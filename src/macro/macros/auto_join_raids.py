@@ -87,7 +87,8 @@ def click_on_raids_tab(window_id: int) -> bool:
 def handle_speed_cancel(window_id: int):
     """
     Обрабатывает ситуацию, когда не нашлось изображение со вкладкой рейдов.
-    Нажимает на join_raid-speed_cancel и затем снова ищет вкладку с рейдами.
+    Сначала ищет кнопку join_raid-raid_is_full, затем join_raid-speed_cancel,
+    и после нажатия снова ищет вкладку с рейдами.
     
     Args:
         window_id: Handle окна.
@@ -95,23 +96,32 @@ def handle_speed_cancel(window_id: int):
     Returns:
         True, если успешно обработал, False иначе.
     """
-    print("[Инфо] Вкладка рейдов не найдена, пытаемся нажать speed_cancel...")
+    print("[Инфо] Вкладка рейдов не найдена, пытаемся найти raid_is_full или speed_cancel...")
     
-    # Ищем кнопку speed_cancel
-    speed_cancel_region = find_region("join_raid-speed_cancel")
+    # Сначала ищем кнопку raid_is_full
+    raid_is_full_region = find_region("join_raid-raid_is_full")
     
-    if not speed_cancel_region:
-        print("[Предупреждение] Кнопка speed_cancel не найдена")
-        return False
+    if raid_is_full_region:
+        print(f"[Инфо] Найдена кнопка raid_is_full: {raid_is_full_region}")
+        # Кликаем на raid_is_full
+        click_in_window_region(window_id, raid_is_full_region)
+        delay(1.0)
+    else:
+        # Если raid_is_full не найдена, ищем speed_cancel
+        speed_cancel_region = find_region("join_raid-speed_cancel")
+        
+        if not speed_cancel_region:
+            print("[Предупреждение] Кнопки raid_is_full и speed_cancel не найдены")
+            return False
+        
+        print(f"[Инфо] Найдена кнопка speed_cancel: {speed_cancel_region}")
+        
+        # Кликаем на speed_cancel
+        click_in_window_region(window_id, speed_cancel_region)
+        delay(1.0)
     
-    print(f"[Инфо] Найдена кнопка speed_cancel: {speed_cancel_region}")
-    
-    # Кликаем на speed_cancel
-    click_in_window_region(window_id, speed_cancel_region)
-    delay(1.0)
-    
-    # После нажатия speed_cancel снова пытаемся кликнуть на вкладку рейдов
-    print("[Инфо] Повторная попытка клика по вкладке рейдов после speed_cancel...")
+    # После нажатия кнопки снова пытаемся кликнуть на вкладку рейдов
+    print("[Инфо] Повторная попытка клика по вкладке рейдов...")
     return click_on_raids_tab(window_id)
 
 
